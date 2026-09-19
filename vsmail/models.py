@@ -140,3 +140,30 @@ class Verdict:
             "has_defect": self.has_defect,
             "defect_fields": list(self.defect_fields),
         }
+
+
+@dataclass(frozen=True)
+class Classification:
+    """Which of the five categories an email belongs to."""
+
+    category: str
+    confidence: float = 1.0
+    rationale: str | None = None
+
+
+@dataclass(frozen=True)
+class Extraction:
+    """The seven fields as each document states them.
+
+    Values are raw, exactly as written. Normalization and comparison happen
+    afterwards in our own code, never in the model.
+    """
+
+    si: dict[str, str | None] = field(default_factory=dict)
+    bl: dict[str, str | None] = field(default_factory=dict)
+    si_snippets: dict[str, str] = field(default_factory=dict)
+    bl_snippets: dict[str, str] = field(default_factory=dict)
+
+    def missing(self, fields: tuple[str, ...]) -> list[str]:
+        """Fields absent from either document."""
+        return [f for f in fields if not self.si.get(f) or not self.bl.get(f)]
