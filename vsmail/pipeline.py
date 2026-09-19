@@ -8,11 +8,12 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from vsmail.compare import decide
-from vsmail.config import CONFIDENCE_THRESHOLD, CONSENSUS_MODE
+from vsmail.compare import compare_all, decide
+from vsmail.config import CONFIDENCE_THRESHOLD, CONSENSUS_MODE, EQUIVALENCE_MODE
 from vsmail.consensus import extract_with_consensus
 from vsmail.documents import read_document
 from vsmail.documents.kinds import DISQUALIFYING
+from vsmail.equivalence import concerns_for, disputes
 from vsmail.inbox import Bundle
 from vsmail.llm.base import Provider
 from vsmail.models import Document, EmailRecord, Extraction, Verdict
@@ -148,8 +149,28 @@ async def process_email(
                 provenance=tuple(provenance),
             )
 
+    verdict = decide(email, category, si, bl, extraction)
+
+    if verdict.status == "MISMATCH" and extraction is not None:
+        # The model may dispute a reported defect, and only in that direction.
+        # A dispute adds a concern, which routes the case to a person; it
+        # cannot clear the defect. A model able to approve a discrepancy is a
+        # model able to approve the wrong one, quietly.
+        disputed = await disputes(provider, compare_all(extraction))
+        concerns.extend(concerns_for(disputed))
+        if disputed and EQUIVALENCE_MODE == "blocking":
+            # Here to be measured, not assumed. The same trade cost three real
+            # defects when consensus was allowed to escalate, so this stays off
+            # until a run says otherwise.
+            verdict = Verdict(
+                email_id=email.email_id,
+                category=category,
+                status="NEEDS_REVIEW",
+                review_reason="missing_value",
+            )
+
     return Processed(
-        verdict=decide(email, category, si, bl, extraction),
+        verdict=verdict,
         extraction=extraction,
         si=si,
         bl=bl,

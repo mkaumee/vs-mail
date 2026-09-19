@@ -48,6 +48,13 @@ CONFIDENCE_THRESHOLD = float(os.environ.get("VS_CONFIDENCE_THRESHOLD", "0.6"))
 #: caught defect, which is half the score.
 CONSENSUS_MODE = os.environ.get("VS_CONSENSUS_MODE", "advisory")
 
+#: What a model's dispute of a reported defect does.
+#: "advisory" keeps the MISMATCH and flags the case; "blocking" would escalate
+#: it. Advisory is the default for the same measured reason consensus is:
+#: escalating a correct MISMATCH throws away a caught defect. Blocking is here
+#: to be measured, not assumed.
+EQUIVALENCE_MODE = os.environ.get("VS_EQUIVALENCE_MODE", "advisory")
+
 #: The five categories every email is sorted into.
 CATEGORIES = (
     "BL_COMPARISON",

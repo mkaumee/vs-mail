@@ -20,7 +20,7 @@ from vsmail.config import CATEGORIES, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, FIELDS
 from vsmail.models import Classification, Document, EmailRecord, Extraction
 from vsmail.normalize import is_placeholder
 from vsmail.consensus import merge
-from vsmail.prompts import CLASSIFY_SYSTEM, EXTRACT_SYSTEM
+from vsmail.prompts import CLASSIFY_SYSTEM, EXTRACT_SYSTEM, JUDGE_SYSTEM
 
 #: Retried on transient failures; a 520-email run should not die on one 503.
 _RETRIES = 3
@@ -128,6 +128,29 @@ class DeepSeekProvider:
             self.extract(si, bl, reversed_order=True),
         )
         return merge(first, second)
+
+    async def judge_equivalence(
+        self, pairs: list[tuple[str, str, str]]
+    ) -> tuple[str, ...]:
+        """Which of these already-reported defects might name the same thing.
+
+        One call for all the differing fields on an email, not one per field:
+        the pairs are short, and a single call lets the model see them
+        together. Returns field names only — the reasoning is for the prompt's
+        benefit, not ours, because nothing downstream acts on it.
+        """
+        lines = "\n".join(
+            f"- {field}: shipping instruction says {si!r}, "
+            f"draft bill of lading says {bl!r}"
+            for field, si, bl in pairs
+        )
+        data = await self._json_call(
+            JUDGE_SYSTEM, f"Pairs reported as different:\n{lines}"
+        )
+        same = data.get("same_entity")
+        if not isinstance(same, list):
+            return ()
+        return tuple(str(field) for field in same)
 
     async def aclose(self) -> None:
         await self._client.aclose()

@@ -34,3 +34,16 @@ class Provider(Protocol):
     async def aclose(self) -> None:
         """Release any network resources."""
         ...
+
+
+# Two capabilities are deliberately *not* on this protocol, and are looked up
+# with `getattr` instead:
+#
+#   extract_twice(si, bl)      -> vsmail.consensus
+#   judge_equivalence(pairs)   -> vsmail.equivalence
+#
+# Both are meaningful only for a model. A deterministic provider repeating
+# itself learns nothing, and has no opinion about whether two company names
+# denote the same company. Requiring them here would force the mock to
+# implement stubs that lie about having an opinion; leaving them optional lets
+# absence mean what it actually means.
