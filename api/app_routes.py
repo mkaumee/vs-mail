@@ -9,6 +9,7 @@ import os
 from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import RedirectResponse
 
 from api.auth import require_token
 from vsmail import pipeline, submission as submission_module
@@ -18,6 +19,11 @@ from vsmail.results import ResultStore
 from vsmail.review import ReviewStore
 
 app_router = APIRouter(dependencies=[Depends(require_token)])
+
+#: The OAuth callback cannot be guarded: Google redirects the operator's
+#: browser to it, and a browser redirect carries no header. See the callback
+#: itself for what stands in for the token there.
+oauth_router = APIRouter()
 
 
 def _results() -> ResultStore:
@@ -169,28 +175,101 @@ async def job(job_id: str) -> dict:
     return found.as_dict()
 
 
-# -- the mailbox itself --------------------------------------------------
+# -- connecting the mailbox ----------------------------------------------
+#: Authorisations this service started, by the `state` Google will hand back,
+#: each holding when it started and its PKCE verifier. In memory on purpose: a
+#: restart should invalidate a half-finished consent rather than leave it
+#: open, and nothing here outlives one.
+_PENDING: dict[str, tuple[float, str | None]] = {}
+
+#: How long a consent may take before its state is no longer accepted.
+STATE_TTL = 600.0
+
+
+def _drop_stale(now: float) -> None:
+    for state, (started, _) in list(_PENDING.items()):
+        if now - started > STATE_TTL:
+            del _PENDING[state]
+
+
 @app_router.get("/gmail/status")
 async def gmail_status() -> dict:
     """Whether Gmail is usable, without throwing if it is not set up."""
-    from vsmail.gmail.client import CREDENTIALS, TOKEN
+    from vsmail.gmail.client import CREDENTIALS, address, authorised, service
 
-    ready = CREDENTIALS.is_file() and TOKEN.is_file()
     info: dict = {
         "credentials_present": CREDENTIALS.is_file(),
-        "authorised": TOKEN.is_file(),
-        "ready": ready,
+        "authorised": authorised(),
+        "ready": False,
         "mailbox": None,
     }
-    if ready:
+    if info["authorised"]:
         try:
-            from vsmail.gmail.client import address, service
-
-            info["mailbox"] = address(service(interactive=False))
+            info["mailbox"] = address(service())
+            info["ready"] = True
         except Exception as exc:
-            info["ready"] = False
             info["error"] = str(exc)
     return info
+
+
+@app_router.get("/gmail/auth/start")
+async def gmail_auth_start() -> dict:
+    """Begin consent. The browser goes where this says.
+
+    Guarded, and that is what makes the unguarded callback safe: the `state`
+    it will accept can only be minted here, behind the service token.
+    """
+    import time
+
+    from vsmail.gmail.client import NotAuthorised, authorization_url
+
+    try:
+        url, state, verifier = authorization_url()
+    except NotAuthorised as exc:
+        raise HTTPException(400, detail=str(exc))
+
+    now = time.time()
+    _drop_stale(now)
+    _PENDING[state] = (now, verifier)
+    return {"authorization_url": url}
+
+
+@oauth_router.get("/gmail/auth/callback", include_in_schema=False)
+async def gmail_auth_callback(
+    code: str = "", state: str = "", error: str = ""
+) -> RedirectResponse:
+    """Where Google returns the operator after they approve.
+
+    Unauthenticated by necessity — this is a browser redirect, so there is no
+    place to put the service token. `state` carries the guard instead: it was
+    issued by the guarded start route and is single-use, so a request that
+    did not come from a real authorisation has nothing to present.
+
+    The result is a redirect rather than JSON because a person is looking at
+    it. The token itself is never rendered.
+    """
+    import time
+
+    from vsmail.gmail.client import NotAuthorised, exchange
+
+    if error:
+        return RedirectResponse(f"/?gmail=denied&detail={error}")
+
+    # Prune first, then look: otherwise the state being presented is popped
+    # without its own age ever being checked, and an authorisation started
+    # hours ago still completes.
+    _drop_stale(time.time())
+    pending = _PENDING.pop(state, None)
+    if pending is None:
+        return RedirectResponse("/?gmail=expired")
+
+    try:
+        exchange(code, state, pending[1])
+    except NotAuthorised as exc:
+        return RedirectResponse(f"/?gmail=denied&detail={exc}")
+    except Exception:
+        return RedirectResponse("/?gmail=failed")
+    return RedirectResponse("/?gmail=connected")
 
 
 @app_router.post("/gmail/seed")
@@ -201,7 +280,7 @@ async def gmail_seed(payload: dict | None = None) -> dict:
         from vsmail.gmail import seed as seeding
         from vsmail.gmail.client import service
 
-        svc = service(interactive=False)
+        svc = service()
         job.total = limit or len(Bundle().emails())
         job.say("inserting messages")
         # The seeder is synchronous and rate-limited; a thread keeps the
@@ -225,7 +304,7 @@ async def gmail_reset() -> dict:
         from vsmail.gmail.client import service
 
         job.say("moving seeded messages to the bin")
-        result = await asyncio.to_thread(seeding.reset, service(interactive=False))
+        result = await asyncio.to_thread(seeding.reset, service())
         job.say(f"binned {result['trashed']}")
         return result
 
@@ -249,7 +328,7 @@ async def watch_start(payload: dict | None = None) -> dict:
         from vsmail.gmail.message import to_record
         from vsmail.gmail.source import GmailSource
 
-        svc = service(interactive=False)
+        svc = service()
         source = GmailSource(svc)
         labels = Labels(svc)
         provider = _provider(provider_name)

@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from api.app_routes import app_router
+from api.app_routes import app_router, oauth_router
 from api.routes import guarded, router
 
 app = FastAPI(
@@ -33,6 +33,9 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(guarded)
 app.include_router(app_router)
+# Unguarded, because Google redirects a browser to it. Registered here with
+# the rest so it is ahead of the catch-all that serves the page.
+app.include_router(oauth_router)
 
 #: The built frontend, served by this same app so there is one URL, one
 #: deploy and no CORS. Mounted last so it cannot shadow an API route.
