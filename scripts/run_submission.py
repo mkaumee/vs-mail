@@ -76,7 +76,16 @@ def explain(processed) -> None:
 
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source", default=str(DEFAULT_SOURCE))
+    parser.add_argument(
+        "--source",
+        default=str(DEFAULT_SOURCE),
+        help='bundle folder, a scoring server URL, or "gmail" for a real mailbox',
+    )
+    parser.add_argument(
+        "--labels",
+        action="store_true",
+        help="with --source gmail, write the triage back onto the messages",
+    )
     parser.add_argument("--provider", default="mock", choices=("mock", "deepseek", "remote"))
     parser.add_argument("--out", default="submission.json")
     parser.add_argument("--concurrency", type=int, default=pipeline.DEFAULT_CONCURRENCY)
@@ -106,7 +115,15 @@ async def main() -> int:
     )
     args = parser.parse_args()
 
-    bundle = Bundle(args.source)
+    if args.source == "gmail":
+        from vsmail.gmail.client import address, service_or_exit
+        from vsmail.gmail.source import GmailSource
+
+        gmail = service_or_exit()
+        bundle = GmailSource(gmail)
+        print(f"reading the mailbox {address(gmail)} (including Spam)")
+    else:
+        bundle = Bundle(args.source)
     provider = make_provider(args.provider)
 
     store = None
@@ -158,6 +175,20 @@ async def main() -> int:
         for problem in problems[:20]:
             print(f"  {problem}")
         return 1
+
+    if args.labels:
+        if args.source != "gmail":
+            raise SystemExit("--labels only applies with --source gmail")
+        from vsmail.gmail.labels import Labels, labels_for
+
+        writer = Labels(bundle.service)
+        written = 0
+        for item in processed:
+            message_id = bundle.message_id_for(item.verdict.email_id)
+            if message_id:
+                writer.apply(message_id, labels_for(item.verdict.to_submission_entry()))
+                written += 1
+        print(f"  labelled {written} message(s) in Gmail")
 
     path = submission.write(result, args.out)
 

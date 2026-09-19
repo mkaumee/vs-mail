@@ -26,3 +26,18 @@ dist/
 
 # Human review cases
 review.json
+
+# macOS junk
+.DS_Store
+
+# Gmail credentials and caches — never committed
+credentials.json
+token.json
+.gmail-cache/
+
+# Frontend build artefacts
+frontend/node_modules/
+frontend/.vite/
+
+# Run results shown by the app
+results.json
