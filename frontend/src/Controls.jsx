@@ -39,6 +39,17 @@ export default function Controls({ stats, onChanged, onError }) {
     }
   }
 
+  // Consent happens in the operator's own browser and comes back to this
+  // app, which is what a web OAuth client means. There is no terminal step.
+  const connectGmail = async () => {
+    try {
+      const { authorization_url } = await api.gmailAuthStart()
+      window.location.href = authorization_url
+    } catch (error) {
+      onError(error.message)
+    }
+  }
+
   const toggleWatch = async () => {
     try {
       if (watching) {
@@ -78,6 +89,10 @@ export default function Controls({ stats, onChanged, onError }) {
       >
         {busy && job.kind === 'run' ? `Processing${progress}` : 'Process inbox'}
       </button>
+
+      {gmail && !gmail.ready && (
+        <button onClick={connectGmail}>Connect Gmail</button>
+      )}
 
       {gmail?.ready && (
         <>

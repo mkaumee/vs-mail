@@ -35,6 +35,27 @@ function Gate({ onDone }) {
   )
 }
 
+// The OAuth callback cannot return JSON — a person's browser lands on it —
+// so it says how it went in the URL and the app reports it here.
+const GMAIL_OUTCOMES = {
+  connected: ['info', 'Gmail connected.'],
+  denied: ['error', 'Gmail access was not granted.'],
+  expired: ['error', 'That authorisation took too long. Press Connect Gmail again.'],
+  failed: ['error', 'Gmail could not be connected.'],
+}
+
+function readGmailOutcome() {
+  const params = new URLSearchParams(window.location.search)
+  const outcome = GMAIL_OUTCOMES[params.get('gmail')]
+  if (!outcome) return null
+  const [tone, message] = outcome
+  const detail = params.get('detail')
+  // Strip it, so a reload does not repeat a message about something that
+  // already happened.
+  window.history.replaceState({}, '', window.location.pathname)
+  return { tone, message: detail ? `${message} ${detail}` : message }
+}
+
 export default function App() {
   const [ready, setReady] = useState(Boolean(getToken()))
   const [data, setData] = useState(null)
@@ -42,6 +63,7 @@ export default function App() {
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [selected, setSelected] = useState(null)
   const [error, setError] = useState(null)
+  const [notice, setNotice] = useState(readGmailOutcome)
 
   const load = useCallback(async () => {
     try {
@@ -99,6 +121,15 @@ export default function App() {
       </header>
 
       {error && <div className="note error" style={{ margin: '10px 18px' }}>{error}</div>}
+      {notice && (
+        <div
+          className={`note ${notice.tone}`}
+          style={{ margin: '10px 18px', cursor: 'pointer' }}
+          onClick={() => setNotice(null)}
+        >
+          {notice.message}
+        </div>
+      )}
 
       <div className="panes">
         <nav className="sidebar">

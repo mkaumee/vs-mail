@@ -34,6 +34,10 @@ export const api = {
   startRun: (options) => call('/jobs/run', { method: 'POST', body: options }),
   job: (id) => call(`/jobs/${id}`),
   gmailStatus: () => call('/gmail/status'),
+  // Returns where to send the browser. The callback Google redirects to is
+  // the one route with no token on it, so starting here is what authorises
+  // the whole exchange.
+  gmailAuthStart: () => call('/gmail/auth/start'),
   seed: (limit) => call('/gmail/seed', { method: 'POST', body: { limit } }),
   resetGmail: () => call('/gmail/reset', { method: 'POST' }),
   watchStatus: () => call('/watch/status'),
