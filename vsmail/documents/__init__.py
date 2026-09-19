@@ -11,8 +11,10 @@ import os
 
 from vsmail.models import Document
 from vsmail.documents.base import DocumentUnreadable
+from vsmail.documents.docx import read_docx
 from vsmail.documents.pdf import read_pdf
 from vsmail.documents.text import read_text
+from vsmail.documents.xlsx import read_xlsx
 
 __all__ = ["read_document", "role_from_path"]
 
@@ -51,9 +53,23 @@ def read_document(path: str, data: bytes, role: str | None = None) -> Document:
             return Document(path=path, role=role, readable=False, error=str(exc))
         return Document(path=path, role=role, text=text, images=images)
 
+    if extension in (".xlsx", ".xlsm"):
+        return _text_only(path, role, read_xlsx, data)
+
+    if extension == ".docx":
+        return _text_only(path, role, read_docx, data)
+
     return Document(
         path=path,
         role=role,
         readable=False,
         error=f"unsupported attachment format: {extension or '(none)'}",
     )
+
+
+def _text_only(path: str, role: str, reader, data: bytes) -> Document:
+    """Run a reader that produces text and nothing else."""
+    try:
+        return Document(path=path, role=role, text=reader(data))
+    except DocumentUnreadable as exc:
+        return Document(path=path, role=role, readable=False, error=str(exc))
