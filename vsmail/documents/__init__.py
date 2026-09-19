@@ -10,6 +10,8 @@ from __future__ import annotations
 import os
 
 from vsmail.models import Document
+from vsmail.documents.base import DocumentUnreadable
+from vsmail.documents.pdf import read_pdf
 from vsmail.documents.text import read_text
 
 __all__ = ["read_document", "role_from_path"]
@@ -41,6 +43,13 @@ def read_document(path: str, data: bytes, role: str | None = None) -> Document:
 
     if extension == ".txt":
         return Document(path=path, role=role, text=read_text(data))
+
+    if extension == ".pdf":
+        try:
+            text, images = read_pdf(data)
+        except DocumentUnreadable as exc:
+            return Document(path=path, role=role, readable=False, error=str(exc))
+        return Document(path=path, role=role, text=text, images=images)
 
     return Document(
         path=path,
