@@ -99,6 +99,63 @@ export VS_SERVICE_TOKEN=<the same token>
 python scripts/run_submission.py --provider remote
 ```
 
+## Reading a real Gmail mailbox
+
+The pipeline reads the bundle's files by default. It can read a real mailbox
+over the Gmail API instead.
+
+### One-off setup, which cannot be automated
+
+1. Create a project at [console.cloud.google.com](https://console.cloud.google.com)
+   and enable the Gmail API.
+2. Under Credentials create an OAuth client ID of type **Desktop app**;
+   download it as `credentials.json` in the repo root.
+3. On the OAuth consent screen add the mailbox account as a **Test user** —
+   the app is unverified, so only listed accounts may authorise it.
+
+Use a throwaway Google account. Seeding puts 520 messages in a mailbox, and
+that is not something to do to an inbox you care about. `credentials.json`
+and `token.json` are both gitignored.
+
+### Seeding, reading, labelling
+
+```bash
+python scripts/seed_gmail.py                 # insert the 520
+python scripts/run_submission.py --source gmail --provider mock --out gmail.json
+python scripts/diff_submissions.py submission.mock.json gmail.json
+python scripts/run_submission.py --source gmail --labels
+python scripts/seed_gmail.py --reset         # bin them again
+```
+
+**That diff should be empty**: the same emails reach the same verdicts
+whether they come from files or from Gmail.
+
+The dataset is loaded with `users.messages.insert` rather than being sent,
+and the reason is fidelity. The bundle's emails come from dozens of senders;
+real delivery cannot preserve those, because SPF and DKIM exist to stop
+forged senders, so sent mail arrives from whichever account sent it and the
+classifier loses a signal on all 520.
+
+`--labels` writes the triage back as `VS/BL-Comparison`, `VS/Spam`,
+`VS/Needs-Review`, `VS/Defect-Found` and so on, so the decisions show up in
+Gmail itself rather than only in our own output.
+
+### Watching for live mail
+
+```bash
+python scripts/watch_gmail.py
+python scripts/send_test_email.py            # in another terminal
+```
+
+The watcher polls every ten seconds and processes whatever is new. Unlike
+the seeded dataset, a sent message really travels and arrives on its own —
+email the account from a phone and it will be picked up the same way.
+
+**The whole mailbox is read, Spam included** (`in:anywhere`). If Gmail's own
+filter misfiles something, that is exactly the email an ops desk still has to
+deal with, and a system whose job includes recognising spam should be looking
+where spam actually lands.
+
 ## Human review
 
 The pipeline escalates what it cannot settle. This is where a person settles it.
