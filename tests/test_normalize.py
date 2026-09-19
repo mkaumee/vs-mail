@@ -76,3 +76,25 @@ def test_missing_values_stay_missing():
     assert normalize_port(None) is None
     assert normalize_weight_kg(None) is None
     assert normalize_container_count(None) is None
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["N/A", "n/a", "NA", "TBA", "TBD", "____MT", "_______ MTS", "??? MTS",
+     "-", "---", "NONE", "NIL", "to be advised", "", "   ", None],
+)
+def test_placeholders_state_no_value(value):
+    from vsmail.normalize import is_placeholder
+
+    assert is_placeholder(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["22,000 KG", "NANTONG, CHINA", "SINGAPORE", "NAGAPPA EXPORTS",
+     "NIL PAPER CO LTD", "6 x 40'HC", "235,550 KG", "KTP CO., LTD"],
+)
+def test_real_values_are_not_placeholders(value):
+    from vsmail.normalize import is_placeholder
+
+    assert not is_placeholder(value)

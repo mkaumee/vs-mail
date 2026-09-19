@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 
 from vsmail.config import FIELDS
+from vsmail.normalize import is_placeholder
 
 #: (field, deny, allow) tried in order; the first rule that matches a label wins.
 _RULES: tuple[tuple[str, str | None, str], ...] = (
@@ -80,6 +81,14 @@ def field_for_label(label: str) -> str | None:
 
 
 def _clean(field: str, value: str) -> str:
+    """Tidy a raw value, returning "" for anything that states no value.
+
+    A document writing "N/A" or "____MT" has left the field blank. Reading
+    that as a value would compare it against the other document and report a
+    defect, when the right answer is to escalate for review.
+    """
+    if is_placeholder(value):
+        return ""
     value = value.strip().strip("|;,").strip()
     if field in _PARTY_FIELDS:
         # Keep the party name, drop the address that follows it. In email_004

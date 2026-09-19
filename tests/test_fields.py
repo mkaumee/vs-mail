@@ -113,3 +113,24 @@ def test_a_blank_value_parses_as_missing(bundle):
 def test_parse_always_returns_every_field(bundle):
     values = _fields(bundle, "attachments/email_004_SI.txt")
     assert list(values) == list(FIELDS)
+
+
+@pytest.mark.parametrize(
+    "email_id,field",
+    [
+        ("email_516", "gross_weight_kg"),
+        ("email_517", "port_of_loading"),
+        ("email_517", "port_of_discharge"),
+        ("email_518", "port_of_discharge"),
+        ("email_518", "gross_weight_kg"),
+    ],
+)
+def test_a_placeholder_parses_as_missing_not_as_a_value(bundle, email_id, field):
+    """These SIs write "N/A", "TBA" or "____MT" where a value should be.
+
+    Reading one as a value compares it against the BL's real value and reports
+    a defect, which is a false alarm. The field is missing and the email
+    belongs in review.
+    """
+    path = bundle.get(email_id).attachment_for("SI")
+    assert _fields(bundle, path)[field] is None

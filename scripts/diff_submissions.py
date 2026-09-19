@@ -16,8 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 
-def _line(entry: dict) -> str:
-    parts = [entry["status"]]
+def _line(entry: dict, with_category: bool = False) -> str:
+    parts = [entry["category"]] if with_category else []
+    parts.append(entry["status"])
     if entry.get("review_reason"):
         parts.append(f"({entry['review_reason']})")
     if entry.get("defect_fields"):
@@ -67,10 +68,12 @@ def main() -> int:
         if not ids:
             continue
         print(f"=== {name} ({len(ids)})")
+        # A category change is invisible unless the category is shown.
+        show_category = name == "category changed"
         for email_id in sorted(ids):
             print(f"  {email_id}")
-            print(f"     {Path(args.left).stem:>22}  {_line(left[email_id])}")
-            print(f"     {Path(args.right).stem:>22}  {_line(right[email_id])}")
+            print(f"     {Path(args.left).stem:>22}  {_line(left[email_id], show_category)}")
+            print(f"     {Path(args.right).stem:>22}  {_line(right[email_id], show_category)}")
         print()
 
     for label, data in ((args.left, left), (args.right, right)):

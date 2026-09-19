@@ -12,6 +12,36 @@ from __future__ import annotations
 
 import re
 
+#: Text that fills a field without stating a value. A document writing "N/A",
+#: "TBA" or "____MT" has left the field blank, and treating any of those as a
+#: value turns a missing entry into a reported defect — a false alarm, and the
+#: precise failure this system is scored on avoiding. The correct outcome is
+#: to escalate the email for review instead.
+_PLACEHOLDER = re.compile(
+    r"^(?:"
+    r"[\s_\-.?*]+"
+    r"|(?:n\.?/?a|tba|tbd|tbc|none|nil|pending|unknown"
+    r"|to\s+be\s+(?:advised|confirmed|determined))"
+    r")"
+    r"[\s_\-.?*]*"
+    r"(?:kgs?|mts?|tons?|tonnes?)?"
+    r"[\s_\-.?*]*$",
+    re.I,
+)
+
+
+def is_placeholder(value: str | None) -> bool:
+    """True when a field states no usable value.
+
+    Covers an absent value, an empty one, and one filled in with text that
+    only stands in for a value.
+    """
+    if value is None:
+        return True
+    stripped = value.strip()
+    return not stripped or bool(_PLACEHOLDER.match(stripped))
+
+
 #: A UN/LOCODE or similar code in trailing parentheses.
 _PARENTHETICAL = re.compile(r"\(([^)]*)\)")
 

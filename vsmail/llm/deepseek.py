@@ -17,6 +17,7 @@ import httpx
 
 from vsmail.config import CATEGORIES, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, FIELDS
 from vsmail.models import Classification, Document, EmailRecord, Extraction
+from vsmail.normalize import is_placeholder
 from vsmail.prompts import CLASSIFY_SYSTEM, EXTRACT_SYSTEM
 
 #: Retried on transient failures; a 520-email run should not die on one 503.
@@ -135,8 +136,9 @@ def _fields(raw: Any) -> dict[str, str | None]:
             result[field] = None
             continue
         text = str(value).strip()
-        # Models sometimes write "null" or "N/A" instead of a JSON null.
-        result[field] = None if text.lower() in ("", "null", "none", "n/a", "-") else text
+        # A model sometimes echoes the document's placeholder, or writes
+        # "null" as text, rather than returning a JSON null.
+        result[field] = None if text.lower() == "null" or is_placeholder(text) else text
     return result
 
 
