@@ -1,0 +1,92 @@
+"""End-to-end over the real bundle, with the offline provider."""
+import pytest
+
+from vsmail import pipeline, submission
+from vsmail.llm.mock import MockProvider
+
+
+@pytest.fixture(scope="module")
+def verdicts(bundle):
+    import asyncio
+
+    return asyncio.run(pipeline.run(bundle, MockProvider()))
+
+
+@pytest.fixture(scope="module")
+def result(verdicts):
+    return submission.build(verdicts)
+
+
+def test_every_email_gets_an_entry(bundle, result):
+    assert len(result) == 520
+    assert set(result) == {email.email_id for email in bundle.emails()}
+
+
+def test_the_submission_validates(bundle, result):
+    problems = submission.validate(result, [e.email_id for e in bundle.emails()])
+    assert problems == []
+
+
+def test_email_004_reports_exactly_its_two_defects(result):
+    entry = result["email_004"]
+    assert entry["status"] == "MISMATCH"
+    assert entry["defect_fields"] == ["consignee", "notify_party"]
+    assert entry["has_defect"]
+
+
+@pytest.mark.parametrize(
+    "email_id,reason",
+    [
+        ("email_501", "wrong_doc_type"),
+        ("email_502", "wrong_doc_type"),
+        ("email_503", "wrong_doc_type"),
+        ("email_504", "wrong_doc_type"),
+        ("email_505", "wrong_doc_type"),
+        ("email_506", "missing_attachment"),
+        ("email_507", "missing_attachment"),
+        ("email_508", "missing_attachment"),
+        ("email_509", "missing_attachment"),
+        ("email_510", "missing_attachment"),
+        ("email_511", "unreadable"),
+        ("email_515", "unreadable"),
+        ("email_519", "missing_value"),
+        ("email_520", "missing_value"),
+    ],
+)
+def test_each_planted_edge_case_is_escalated_correctly(result, email_id, reason):
+    entry = result[email_id]
+    assert entry["category"] == "BL_COMPARISON"
+    assert entry["status"] == "NEEDS_REVIEW"
+    assert entry["review_reason"] == reason
+
+
+@pytest.mark.parametrize("email_id", ["email_512", "email_513", "email_514"])
+def test_scans_are_escalated_rather_than_guessed(result, email_id):
+    """The offline provider cannot read an image. It must say so, not guess.
+
+    A vision-capable provider should instead compare these properly, which is
+    the clearest difference the model makes over the baseline.
+    """
+    assert result[email_id]["status"] == "NEEDS_REVIEW"
+    assert result[email_id]["review_reason"] == "missing_value"
+
+
+def test_nothing_outside_comparison_requests_is_escalated(result):
+    for email_id, entry in result.items():
+        if entry["category"] != "BL_COMPARISON":
+            assert entry["status"] == "OK", email_id
+            assert entry["review_reason"] is None
+            assert entry["defect_fields"] == []
+
+
+def test_validation_catches_a_broken_entry(bundle, result):
+    broken = dict(result)
+    broken["email_004"] = dict(broken["email_004"], status="MISMATCH", defect_fields=[])
+    problems = submission.validate(broken, [e.email_id for e in bundle.emails()])
+    assert any("MISMATCH with no defect_fields" in p for p in problems)
+
+
+def test_validation_catches_a_missing_email(bundle, result):
+    short = {k: v for k, v in result.items() if k != "email_001"}
+    problems = submission.validate(short, [e.email_id for e in bundle.emails()])
+    assert any("missing" in p for p in problems)
