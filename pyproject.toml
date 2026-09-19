@@ -1,0 +1,17 @@
+[project]
+name = "vsmail"
+version = "0.1.0"
+description = "Email triage and shipping document verification for the SDOC bundle"
+requires-python = ">=3.11"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["vsmail*", "api*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]

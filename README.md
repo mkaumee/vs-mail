@@ -1,0 +1,182 @@
+# VS-Mail
+
+Email triage and shipping document verification over the SDOC hackathon bundle.
+
+For each of the 520 emails the pipeline decides a category, and for document
+comparison requests it checks a draft Bill of Lading against its Shipping
+Instruction across seven fields — shipper, consignee, notify party, port of
+loading, port of discharge, container count and gross weight — escalating for
+human review when it cannot decide rather than guessing.
+
+The design and the reasoning behind it are in [PLAN.md](PLAN.md).
+
+## Running it
+
+**Python 3.10 or newer is required** (3.11+ recommended). On macOS the default
+`python3` is often 3.9, which cannot parse the `X | None` annotations pydantic
+evaluates at import time — create the virtualenv with a newer interpreter:
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+
+pip install -r requirements-dev.txt
+
+# Offline: no API key, no network. Produces a full baseline submission.
+python scripts/run_submission.py --provider mock
+
+# Score it against the hand-written dev set.
+python scripts/score_devset.py
+
+pytest -q
+```
+
+`submission.json` lands in the working directory with one entry per email.
+
+### Running against the model locally
+
+Copy `.env.example` to `.env` and set `DEEPSEEK_API_KEY`. It is read on import,
+and a variable already set in your shell always wins over the file. `.env` is
+gitignored.
+
+```bash
+cp .env.example .env          # then fill in DEEPSEEK_API_KEY
+
+# Smoke-test on a handful of emails before spending a full pass.
+python scripts/run_submission.py --provider deepseek \
+  --only email_004 email_055 email_119 email_512 --out probe.json
+
+# The full run, kept separate so it can be diffed against the baseline.
+python scripts/run_submission.py --provider deepseek --out submission.deepseek.json
+python scripts/score_devset.py submission.deepseek.json
+```
+
+| Flag | |
+|---|---|
+| `--only ID [ID ...]` | process just these emails |
+| `--limit N` | process the first N |
+| `--concurrency N` | in-flight emails, default 12; lower it if you hit rate limits |
+
+A subset run is labelled as such and is **not** a submittable file — it does not
+cover all 520 emails.
+
+## The service
+
+```bash
+uvicorn api.main:app --reload
+```
+
+| Route | |
+|---|---|
+| `GET /health` | open, so a deployment can be checked without the secret |
+| `POST /classify` | one email to a category |
+| `POST /extract` | SI and BL to raw field values |
+| `POST /compare` | verdict plus the per-field detail |
+| `POST /run` | the whole bundle to a submission |
+| `POST /submit` | grade a submission against the dev set |
+
+Everything except `/health` needs an `X-VS-Token` header.
+
+## Deploying to Railway
+
+Set these as Railway environment variables. **The API key belongs here and
+nowhere else** — not in this repository, not in a `.env` on your machine.
+
+| Variable | |
+|---|---|
+| `DEEPSEEK_API_KEY` | your key |
+| `VS_SERVICE_TOKEN` | any long random string; callers must send it |
+| `VS_PROVIDER` | `deepseek` |
+
+`railway.json` sets the start command and points the healthcheck at `/health`.
+With no `VS_SERVICE_TOKEN` configured the guarded routes return 503 rather than
+serving an unauthenticated model endpoint to the internet.
+
+To drive the deployed service from a local run:
+
+```bash
+export VS_SERVICE_URL=https://<your-app>.up.railway.app
+export VS_SERVICE_TOKEN=<the same token>
+python scripts/run_submission.py --provider remote
+```
+
+## Human review
+
+The pipeline escalates what it cannot settle. This is where a person settles it.
+
+```bash
+python scripts/run_submission.py --provider mock      # opens cases
+python scripts/review.py list                         # the queue, worst first
+python scripts/review.py show email_516               # the evidence
+python scripts/review.py resolve email_516 \
+  --by ops.mitchelle --supply "si.gross_weight_kg=235,550 KG"
+python scripts/run_submission.py --provider mock      # the verdict changes
+```
+
+**A resolution never edits a verdict.** The reviewer supplies or corrects an
+*input* and the comparator runs again over it, so a corrected email reaches
+its outcome by exactly the path an uncorrected one does. Supply a wrong value
+and you get a `MISMATCH`, not a rubber stamp. `--settle-status` can force an
+outcome without values, and is recorded separately because it is the one
+action that bypasses the comparator.
+
+Corrections persist in `review.json` (gitignored) and are re-applied on later
+runs — without that, the pipeline's statelessness would lose every decision on
+the next run.
+
+The queue is ordered by what a wrong value costs: consignee and notify party
+are critical because they carry legal title to the cargo and drive customs
+clearance, gross weight is high because it is a SOLAS VGM declaration, and a
+document that is missing, unreadable or simply the wrong document outranks any
+single field because it blocks the whole comparison.
+
+The same thing over HTTP: `GET /review`, `GET /review/{id}`,
+`POST /review/{id}/resolve`, `POST /review/{id}/retry` — the last reprocesses
+one email without redoing the other 519.
+
+## A note on the score
+
+`scripts/score_devset.py` and `POST /submit` report a **dev-set score, not the
+real one**. There is no ground truth in the bundle, so both grade against 51
+labels written by hand in `tests/devset.json`. The number measures agreement with
+our own reading and is useful for catching regressions. Where a run disagrees with
+a label, re-read the label before changing the pipeline.
+
+The offline provider scores 1.000 on the weighted axes but only 0.824 on review
+reasons, because it cannot read the three scanned emails and escalates them
+instead of comparing them. That gap is the measurable difference a vision-capable
+provider makes.
+
+### When the model is unsure
+
+Two signals, both surfaced by `--explain` and neither able to change the
+submission on its own:
+
+| Signal | |
+|---|---|
+| Low classification confidence | Below `VS_CONFIDENCE_THRESHOLD` (0.6) the case is flagged. The model's best guess still ships — every email needs one of the five categories and the schema cannot express doubt — so macro-F1 is untouched. |
+| Two readings that differ | Extraction runs twice, the second pass with the documents in reversed order. A field read differently depending on order is unstable and gets flagged. |
+
+The second pass swaps the document order rather than repeating the call
+because the client sends `temperature: 0` — an identical repeat returns
+identical JSON, agrees with itself and catches nothing.
+
+`VS_CONSENSUS_MODE` decides what a disagreement does. `advisory`, the default,
+keeps the verdict and flags the case. `blocking` escalates it, which costs a
+caught defect whenever the verdict was right, so it is opt-in and should be
+measured with `scripts/diff_submissions.py` before being turned on.
+
+A deterministic provider has no second pass and reports no uncertainty. That
+is accurate rather than a gap: repeating a deterministic reading tells you
+nothing.
+
+### Auditing a verdict
+
+```bash
+python scripts/run_submission.py --provider deepseek --only email_512 --explain
+python scripts/export_pages.py email_512
+```
+
+The first prints the values read from each document; the second writes the
+scanned pages out as PNGs. For an image-only document there is no second opinion
+to check against, so putting the two side by side is the only way to tell a
+correct reading from a confident-looking invention.
