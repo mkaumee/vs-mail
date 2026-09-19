@@ -13,7 +13,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from vsmail.gmail.client import address, service  # noqa: E402
+from vsmail.gmail.client import address, service_or_exit  # noqa: E402
 from vsmail.gmail.send import compose, send  # noqa: E402
 
 _DEFAULT_BODY = (
@@ -33,7 +33,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    svc = service()
+    svc = service_or_exit()
     recipient = args.to or address(svc)
     message_id = send(svc, compose(recipient, args.subject, args.body, args.attach))
     print(f"sent to {recipient} (id {message_id})")

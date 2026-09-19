@@ -116,10 +116,10 @@ async def main() -> int:
     args = parser.parse_args()
 
     if args.source == "gmail":
-        from vsmail.gmail.client import address, service
+        from vsmail.gmail.client import address, service_or_exit
         from vsmail.gmail.source import GmailSource
 
-        gmail = service()
+        gmail = service_or_exit()
         bundle = GmailSource(gmail)
         print(f"reading the mailbox {address(gmail)} (including Spam)")
     else:

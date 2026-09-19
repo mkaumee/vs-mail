@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vsmail.gmail import seed as seeding  # noqa: E402
-from vsmail.gmail.client import address, service  # noqa: E402
+from vsmail.gmail.client import address, service_or_exit  # noqa: E402
 from vsmail.inbox import Bundle  # noqa: E402
 
 
@@ -21,7 +21,7 @@ def main() -> int:
     parser.add_argument("--yes", action="store_true", help="skip the confirmation")
     args = parser.parse_args()
 
-    svc = service()
+    svc = service_or_exit()
     mailbox = address(svc)
 
     # Seeding the wrong account is tedious to undo, so it is always named.

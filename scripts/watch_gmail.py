@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from vsmail import pipeline  # noqa: E402
-from vsmail.gmail.client import address, service  # noqa: E402
+from vsmail.gmail.client import address, service_or_exit  # noqa: E402
 from vsmail.gmail.labels import Labels, labels_for  # noqa: E402
 from vsmail.gmail.message import to_record  # noqa: E402
 from vsmail.gmail.source import CACHE, GmailSource  # noqa: E402
@@ -83,7 +83,7 @@ async def main() -> int:
     )
     args = parser.parse_args()
 
-    svc = service()
+    svc = service_or_exit()
     source = GmailSource(svc)
     labels = Labels(svc)
     provider = _provider(args.provider)
