@@ -318,6 +318,36 @@ SMTP. This matters for four concrete reasons:
 **Scope required:** `gmail.insert`, or `gmail.modify` if we also want to write
 labels back (we do — see feature ①).
 
+### The OAuth client is a **Web application**, not a Desktop app
+
+⚠️ **Corrected during the build.** This originally said Desktop app, which was
+written when the system was still a set of CLI scripts. VS-Mail is a web app
+deployed to Railway, and the client type has to match what it actually is.
+
+A desktop client authorises by opening a browser on the machine running the
+code and catching the redirect on a loopback port — `run_local_server`. There
+is no browser on Railway and no localhost to come back to, so that flow has
+nowhere to run. A web client redirects to a URI registered in advance, so
+consent happens in the operator's own browser and lands back on the service
+wherever it is deployed.
+
+Three consequences:
+
+1. **There is no terminal login.** A person presses Connect Gmail in the app.
+   The scripts consume whatever that produced and never prompt.
+2. **The callback cannot be guarded by the service token**, because Google
+   redirects a browser to it and a browser redirect carries no header. The
+   OAuth `state` stands in: it is minted only by the guarded start route, it
+   is single-use, and it expires. A request that did not come from a real
+   authorisation has nothing to present.
+3. **The token may live in an environment variable.** Railway's filesystem is
+   wiped on redeploy, so `token.json` alone would mean re-consenting after
+   every push. `VS_GMAIL_TOKEN_JSON` takes precedence over the file when set.
+
+Downloading the wrong client type is an easy mistake whose natural failure is
+a `KeyError` from inside `google-auth`. The client checks for it and names
+the problem instead.
+
 ### Keep `send` for exactly one thing
 
 During the demo, sending one live email from a phone into the system inbox and
@@ -489,6 +519,10 @@ if it doesn't, and nobody in the audience can tell.
   Fine for a demo, capped at 100 users.
 - **Do this first.** It's boring, it can block everything, and it's the one task that
   doesn't get faster with more effort.
+- The redirect URI must be registered before consent will work anywhere, and
+  Google matches it exactly. Register localhost *and* the deployed domain in
+  the same sitting; discovering the second one is missing mid-demo is the
+  failure mode here.
 - **Skip Pub/Sub push notifications.** Poll every 10 seconds. Demos identically,
   saves ~2 hours.
 

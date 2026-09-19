@@ -134,14 +134,50 @@ over the Gmail API instead.
 
 1. Create a project at [console.cloud.google.com](https://console.cloud.google.com)
    and enable the Gmail API.
-2. Under Credentials create an OAuth client ID of type **Desktop app**;
-   download it as `credentials.json` in the repo root.
+2. Under Credentials create an OAuth client ID of type **Web application** and
+   add an authorised redirect URI for every place this app runs:
+
+   ```
+   http://localhost:8000/gmail/auth/callback
+   https://<your-railway-domain>/gmail/auth/callback
+   ```
+
+   Download it as `credentials.json` in the repo root.
 3. On the OAuth consent screen add the mailbox account as a **Test user** —
    the app is unverified, so only listed accounts may authorise it.
 
 Use a throwaway Google account. Seeding puts 520 messages in a mailbox, and
 that is not something to do to an inbox you care about. `credentials.json`
 and `token.json` are both gitignored.
+
+### Connecting
+
+Start the app and press **Connect Gmail**. Consent opens in your own browser
+and lands back on this service, which is what a web OAuth client means: there
+is no terminal login step, and there is nothing for the scripts to prompt for.
+
+A **Desktop app** client will not work, and the app says so by name if you
+download one by mistake. A desktop client authorises by opening a browser on
+the machine running the code and catching the redirect on a loopback port —
+on a deployed server there is neither a browser nor a localhost to come back
+to.
+
+Set `VS_OAUTH_REDIRECT` wherever the app is not on `localhost:8000`. It is
+configuration rather than something derived from the request, because behind
+a proxy the request's own idea of its scheme and host is not reliable and
+Google matches the registered URI exactly.
+
+### Keeping the connection across a redeploy
+
+Consent writes `token.json`. Railway's filesystem does not survive a
+redeploy, so a deployment that should stay connected puts the token in a
+variable instead:
+
+```bash
+cat token.json        # paste the whole thing into VS_GMAIL_TOKEN_JSON
+```
+
+When that variable is set the file is not read at all, and nothing writes one.
 
 ### Seeding, reading, labelling
 
