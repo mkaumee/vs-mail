@@ -12,6 +12,7 @@ import os
 from vsmail.models import Document
 from vsmail.documents.base import DocumentUnreadable
 from vsmail.documents.docx import read_docx
+from vsmail.documents.kinds import detect_doc_kind
 from vsmail.documents.pdf import read_pdf
 from vsmail.documents.text import read_text
 from vsmail.documents.xlsx import read_xlsx
@@ -44,14 +45,14 @@ def read_document(path: str, data: bytes, role: str | None = None) -> Document:
     extension = os.path.splitext(path)[1].lower()
 
     if extension == ".txt":
-        return Document(path=path, role=role, text=read_text(data))
+        return _document(path, role, text=read_text(data))
 
     if extension == ".pdf":
         try:
             text, images = read_pdf(data)
         except DocumentUnreadable as exc:
             return Document(path=path, role=role, readable=False, error=str(exc))
-        return Document(path=path, role=role, text=text, images=images)
+        return _document(path, role, text=text, images=images)
 
     if extension in (".xlsx", ".xlsm"):
         return _text_only(path, role, read_xlsx, data)
@@ -70,6 +71,19 @@ def read_document(path: str, data: bytes, role: str | None = None) -> Document:
 def _text_only(path: str, role: str, reader, data: bytes) -> Document:
     """Run a reader that produces text and nothing else."""
     try:
-        return Document(path=path, role=role, text=reader(data))
+        return _document(path, role, text=reader(data))
     except DocumentUnreadable as exc:
         return Document(path=path, role=role, readable=False, error=str(exc))
+
+
+def _document(
+    path: str, role: str, text: str = "", images: tuple[bytes, ...] = ()
+) -> Document:
+    """Build a readable Document, naming its kind if we must reject it."""
+    return Document(
+        path=path,
+        role=role,
+        text=text,
+        images=images,
+        doc_kind=detect_doc_kind(text),
+    )
