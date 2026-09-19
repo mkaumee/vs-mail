@@ -58,11 +58,14 @@ def explain(processed) -> None:
               + (f"  ({verdict.review_reason})" if verdict.review_reason else ""))
         print(f"  SI: {_source(item.si)}")
         print(f"  BL: {_source(item.bl)}")
+        for concern in item.concerns:
+            print(f"  ! {concern}")
         if item.extraction is None:
             print("  (no extraction — decided before reading the documents)")
             continue
+        uncertain = set(item.extraction.uncertain_fields)
         for comparison in compare_all(item.extraction):
-            mark = "  " if comparison.equal else "->"
+            mark = "??" if comparison.field in uncertain else ("  " if comparison.equal else "->")
             print(f"  {mark} {comparison.field:<18} SI {comparison.si_value!r}")
             print(f"     {'':<18} BL {comparison.bl_value!r}"
                   + (f"   [{comparison.note}]" if comparison.note else ""))

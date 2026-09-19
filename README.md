@@ -112,6 +112,29 @@ reasons, because it cannot read the three scanned emails and escalates them
 instead of comparing them. That gap is the measurable difference a vision-capable
 provider makes.
 
+### When the model is unsure
+
+Two signals, both surfaced by `--explain` and neither able to change the
+submission on its own:
+
+| Signal | |
+|---|---|
+| Low classification confidence | Below `VS_CONFIDENCE_THRESHOLD` (0.6) the case is flagged. The model's best guess still ships — every email needs one of the five categories and the schema cannot express doubt — so macro-F1 is untouched. |
+| Two readings that differ | Extraction runs twice, the second pass with the documents in reversed order. A field read differently depending on order is unstable and gets flagged. |
+
+The second pass swaps the document order rather than repeating the call
+because the client sends `temperature: 0` — an identical repeat returns
+identical JSON, agrees with itself and catches nothing.
+
+`VS_CONSENSUS_MODE` decides what a disagreement does. `advisory`, the default,
+keeps the verdict and flags the case. `blocking` escalates it, which costs a
+caught defect whenever the verdict was right, so it is opt-in and should be
+measured with `scripts/diff_submissions.py` before being turned on.
+
+A deterministic provider has no second pass and reports no uncertainty. That
+is accurate rather than a gap: repeating a deterministic reading tells you
+nothing.
+
 ### Auditing a verdict
 
 ```bash

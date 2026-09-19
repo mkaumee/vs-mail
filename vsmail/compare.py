@@ -44,7 +44,8 @@ class FieldComparison:
         return (self.si_value or "") != (self.bl_value or "")
 
 
-def _normalized(field: str, value: str | None):
+def normalized_for(field: str, value: str | None):
+    """The comparable form of a value, by field. Shared with consensus."""
     if field in _PARTY_FIELDS:
         return normalize_name(value)
     if field in _PORT_FIELDS:
@@ -76,8 +77,8 @@ def _explain(field: str, si_value: str, bl_value: str) -> str:
 
 def compare_field(field: str, si_value: str | None, bl_value: str | None) -> FieldComparison:
     """Compare one field's value across the two documents."""
-    si_normalized = _normalized(field, si_value)
-    bl_normalized = _normalized(field, bl_value)
+    si_normalized = normalized_for(field, si_value)
+    bl_normalized = normalized_for(field, bl_value)
     equal = si_normalized == bl_normalized
 
     note = None

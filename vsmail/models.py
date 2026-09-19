@@ -163,6 +163,9 @@ class Extraction:
     bl: dict[str, str | None] = field(default_factory=dict)
     si_snippets: dict[str, str] = field(default_factory=dict)
     bl_snippets: dict[str, str] = field(default_factory=dict)
+    #: Fields two extraction passes read differently. Empty when only one
+    #: pass ran, which is the case for any deterministic provider.
+    uncertain_fields: tuple[str, ...] = ()
 
     def missing(self, fields: tuple[str, ...]) -> list[str]:
         """Fields absent from either document."""

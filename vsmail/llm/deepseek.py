@@ -8,6 +8,7 @@ bundle go to it as PNGs rather than through a separate OCR stage.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -18,6 +19,7 @@ import httpx
 from vsmail.config import CATEGORIES, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, FIELDS
 from vsmail.models import Classification, Document, EmailRecord, Extraction
 from vsmail.normalize import is_placeholder
+from vsmail.consensus import merge
 from vsmail.prompts import CLASSIFY_SYSTEM, EXTRACT_SYSTEM
 
 #: Retried on transient failures; a 520-email run should not die on one 503.
@@ -86,9 +88,12 @@ class DeepSeekProvider:
             rationale=str(data.get("rationale") or "")[:200] or None,
         )
 
-    async def extract(self, si: Document, bl: Document) -> Extraction:
-        parts: list[dict] = [{"type": "text", "text": _describe(si, bl)}]
-        for document in (si, bl):
+    async def extract(
+        self, si: Document, bl: Document, reversed_order: bool = False
+    ) -> Extraction:
+        parts: list[dict] = [{"type": "text", "text": _describe(si, bl, reversed_order)}]
+        # Images follow in the order the text announced them.
+        for document in ((bl, si) if reversed_order else (si, bl)):
             for image in document.images:
                 parts.append(
                     {
@@ -109,12 +114,32 @@ class DeepSeekProvider:
             bl_snippets=_snippets(data.get("bl_snippets")),
         )
 
+    async def extract_twice(self, si: Document, bl: Document) -> Extraction:
+        """Read both documents twice and record where the readings differ.
+
+        The second pass presents the documents in the opposite order rather
+        than repeating the same request. At temperature 0 a repeat returns
+        identical JSON, so it would agree with itself and catch nothing; a
+        value that changes when the documents are swapped is genuinely
+        unstable.
+        """
+        first, second = await asyncio.gather(
+            self.extract(si, bl),
+            self.extract(si, bl, reversed_order=True),
+        )
+        return merge(first, second)
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
 
-def _describe(si: Document, bl: Document) -> str:
-    """Both documents in one message, so the model sees them side by side."""
+def _describe(si: Document, bl: Document, reversed_order: bool = False) -> str:
+    """Both documents in one message, so the model sees them side by side.
+
+    `reversed_order` puts the draft bill of lading first. The labels still say
+    which is which, so a correct reading is unchanged by the swap — that is
+    the point of asking twice.
+    """
     def body(document: Document, label: str) -> str:
         if document.text.strip():
             return f"=== {label} ({document.path}) ===\n{document.text}"
@@ -124,7 +149,11 @@ def _describe(si: Document, bl: Document) -> str:
             f"in order: {label} first)"
         )
 
-    return f"{body(si, 'SHIPPING INSTRUCTION')}\n\n{body(bl, 'DRAFT BILL OF LADING')}"
+    si_text = body(si, "SHIPPING INSTRUCTION")
+    bl_text = body(bl, "DRAFT BILL OF LADING")
+    if reversed_order:
+        return f"{bl_text}\n\n{si_text}"
+    return f"{si_text}\n\n{bl_text}"
 
 
 def _fields(raw: Any) -> dict[str, str | None]:

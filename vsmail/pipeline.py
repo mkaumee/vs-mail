@@ -9,6 +9,8 @@ import asyncio
 from dataclasses import dataclass
 
 from vsmail.compare import decide
+from vsmail.config import CONFIDENCE_THRESHOLD, CONSENSUS_MODE
+from vsmail.consensus import extract_with_consensus
 from vsmail.documents import read_document
 from vsmail.documents.kinds import DISQUALIFYING
 from vsmail.inbox import Bundle
@@ -33,6 +35,11 @@ class Processed:
     extraction: Extraction | None = None
     si: Document | None = None
     bl: Document | None = None
+    #: What the provider reported for its own classification.
+    confidence: float = 1.0
+    #: Why this case wants a human, beyond anything the submission records.
+    #: Never changes the submission — it feeds the review queue.
+    concerns: tuple[str, ...] = ()
 
 
 def _load(bundle: Bundle, email: EmailRecord, role: str) -> Document | None:
@@ -52,8 +59,21 @@ async def process_email(
     classification = await provider.classify(email)
     category = classification.category
 
+    concerns: list[str] = []
+    if classification.confidence < CONFIDENCE_THRESHOLD:
+        # The model is unsure which category this is. Its best guess still
+        # goes in the submission — every email needs one of the five and the
+        # schema cannot express doubt — but the case is flagged for review.
+        concerns.append(
+            f"classified {category} with confidence {classification.confidence:.2f}"
+        )
+
     if category != "BL_COMPARISON":
-        return Processed(Verdict(email_id=email.email_id, category=category))
+        return Processed(
+            Verdict(email_id=email.email_id, category=category),
+            confidence=classification.confidence,
+            concerns=tuple(concerns),
+        )
 
     si = _load(bundle, email, "SI")
     bl = _load(bundle, email, "BL")
@@ -66,12 +86,36 @@ async def process_email(
         or si.doc_kind in DISQUALIFYING
         or bl.doc_kind in DISQUALIFYING
     )
-    extraction = None if blocked else await provider.extract(si, bl)
+    extraction = None if blocked else await extract_with_consensus(provider, si, bl)
+
+    if extraction is not None and extraction.uncertain_fields:
+        fields = ", ".join(extraction.uncertain_fields)
+        concerns.append(f"two readings disagreed on {fields}")
+        if CONSENSUS_MODE == "blocking":
+            # Escalating costs a caught defect whenever the verdict was right,
+            # and defects are half the score — so this is opt-in and measured
+            # rather than assumed to help.
+            return Processed(
+                verdict=Verdict(
+                    email_id=email.email_id,
+                    category=category,
+                    status="NEEDS_REVIEW",
+                    review_reason="missing_value",
+                ),
+                extraction=extraction,
+                si=si,
+                bl=bl,
+                confidence=classification.confidence,
+                concerns=tuple(concerns),
+            )
+
     return Processed(
         verdict=decide(email, category, si, bl, extraction),
         extraction=extraction,
         si=si,
         bl=bl,
+        confidence=classification.confidence,
+        concerns=tuple(concerns),
     )
 
 

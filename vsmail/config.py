@@ -36,6 +36,18 @@ load_env_file(Path(__file__).resolve().parent.parent / ".env")
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")
 
+#: Below this, a classification is treated as the model saying it is unsure.
+#: It never changes the submission — every email must carry one of the five
+#: categories and the schema has no way to express doubt — but it marks the
+#: case for human review.
+CONFIDENCE_THRESHOLD = float(os.environ.get("VS_CONFIDENCE_THRESHOLD", "0.6"))
+
+#: What a disagreement between two extraction passes does.
+#: "advisory" keeps the verdict and flags the case; "blocking" escalates it.
+#: Advisory is the default because escalating a correct MISMATCH loses a
+#: caught defect, which is half the score.
+CONSENSUS_MODE = os.environ.get("VS_CONSENSUS_MODE", "advisory")
+
 #: The five categories every email is sorted into.
 CATEGORIES = (
     "BL_COMPARISON",
