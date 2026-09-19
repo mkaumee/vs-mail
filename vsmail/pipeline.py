@@ -56,9 +56,14 @@ async def run(
     bundle: Bundle,
     provider: Provider,
     concurrency: int = DEFAULT_CONCURRENCY,
+    emails: list[EmailRecord] | None = None,
 ) -> list[Verdict]:
-    """Process the whole inbox, preserving email order in the result."""
-    emails = bundle.emails()
+    """Process the inbox, preserving email order in the result.
+
+    `emails` narrows the run to a subset, which is how a paid provider gets
+    smoke-tested on a handful of emails before spending a full pass.
+    """
+    emails = bundle.emails() if emails is None else emails
     limit = asyncio.Semaphore(concurrency)
 
     failures: list[tuple[str, str]] = []

@@ -37,21 +37,49 @@ async def main() -> int:
     parser.add_argument("--provider", default="mock", choices=("mock", "deepseek", "remote"))
     parser.add_argument("--out", default="submission.json")
     parser.add_argument("--concurrency", type=int, default=pipeline.DEFAULT_CONCURRENCY)
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="process only the first N emails — smoke-test a paid provider cheaply",
+    )
+    parser.add_argument(
+        "--only",
+        nargs="+",
+        metavar="EMAIL_ID",
+        help="process only these emails, e.g. --only email_004 email_512",
+    )
     args = parser.parse_args()
 
     bundle = Bundle(args.source)
     provider = make_provider(args.provider)
-    print(f"running {provider.name} over {args.source}")
+
+    emails = bundle.emails()
+    if args.only:
+        wanted = set(args.only)
+        emails = [e for e in emails if e.email_id in wanted]
+        unknown = wanted - {e.email_id for e in emails}
+        if unknown:
+            raise SystemExit(f"unknown email id(s): {sorted(unknown)}")
+    if args.limit:
+        emails = emails[: args.limit]
+    partial = len(emails) != len(bundle.emails())
+
+    print(f"running {provider.name} over {len(emails)} email(s) from {args.source}")
+    if partial:
+        print("  (subset run — the result is for inspection, not for submitting)")
 
     started = time.monotonic()
     try:
-        verdicts = await pipeline.run(bundle, provider, concurrency=args.concurrency)
+        verdicts = await pipeline.run(
+            bundle, provider, concurrency=args.concurrency, emails=emails
+        )
     finally:
         await provider.aclose()
     elapsed = time.monotonic() - started
 
     result = submission.build(verdicts)
-    problems = submission.validate(result, [e.email_id for e in bundle.emails()])
+    expected = [e.email_id for e in (emails if partial else bundle.emails())]
+    problems = submission.validate(result, expected)
     if problems:
         print(f"\nsubmission is invalid ({len(problems)} problem(s)):")
         for problem in problems[:20]:
@@ -66,6 +94,8 @@ async def main() -> int:
     defects = collections.Counter(f for v in verdicts for f in v.defect_fields)
 
     print(f"\n{len(verdicts)} emails in {elapsed:.1f}s -> {path}")
+    if partial:
+        print("  NOT a submittable file: it covers a subset, not all 520 emails.")
     print("\ncategory      ", dict(categories.most_common()))
     print("status        ", dict(statuses.most_common()))
     print("review reason ", dict(reasons.most_common()))

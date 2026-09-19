@@ -90,3 +90,11 @@ def test_validation_catches_a_missing_email(bundle, result):
     short = {k: v for k, v in result.items() if k != "email_001"}
     problems = submission.validate(short, [e.email_id for e in bundle.emails()])
     assert any("missing" in p for p in problems)
+
+
+async def test_a_subset_run_processes_only_what_it_is_given(bundle):
+    """How a paid provider gets smoke-tested before a full pass."""
+    wanted = ["email_004", "email_512"]
+    emails = [e for e in bundle.emails() if e.email_id in wanted]
+    results = await pipeline.run(bundle, MockProvider(), emails=emails)
+    assert [v.email_id for v in results] == wanted

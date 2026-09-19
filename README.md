@@ -26,6 +26,33 @@ pytest -q
 
 `submission.json` lands in the working directory with one entry per email.
 
+### Running against the model locally
+
+Copy `.env.example` to `.env` and set `DEEPSEEK_API_KEY`. It is read on import,
+and a variable already set in your shell always wins over the file. `.env` is
+gitignored.
+
+```bash
+cp .env.example .env          # then fill in DEEPSEEK_API_KEY
+
+# Smoke-test on a handful of emails before spending a full pass.
+python scripts/run_submission.py --provider deepseek \
+  --only email_004 email_055 email_119 email_512 --out probe.json
+
+# The full run, kept separate so it can be diffed against the baseline.
+python scripts/run_submission.py --provider deepseek --out submission.deepseek.json
+python scripts/score_devset.py submission.deepseek.json
+```
+
+| Flag | |
+|---|---|
+| `--only ID [ID ...]` | process just these emails |
+| `--limit N` | process the first N |
+| `--concurrency N` | in-flight emails, default 12; lower it if you hit rate limits |
+
+A subset run is labelled as such and is **not** a submittable file — it does not
+cover all 520 emails.
+
 ## The service
 
 ```bash

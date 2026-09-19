@@ -4,6 +4,34 @@ In the deployed setup these come from Railway's environment variables; the
 API key never lives in this repository.
 """
 import os
+from pathlib import Path
+
+
+def load_env_file(path: str | Path = ".env") -> None:
+    """Read KEY=VALUE lines from a .env file into the environment.
+
+    For local runs only. A variable already set in the real environment always
+    wins, so a stray .env can never override what the deployment provides. A
+    missing file is not an error — the deployed service has no .env at all.
+    """
+    file = Path(path)
+    if not file.is_file():
+        return
+    for line in file.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+# Loaded before the settings below are read, so a local .env takes effect.
+# Both the working directory and the repository root are checked.
+load_env_file()
+load_env_file(Path(__file__).resolve().parent.parent / ".env")
 
 DEEPSEEK_BASE_URL = os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-flash")

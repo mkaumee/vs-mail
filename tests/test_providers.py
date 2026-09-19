@@ -22,7 +22,8 @@ def _chat(content: dict) -> dict:
     return {"choices": [{"message": {"content": json.dumps(content)}}]}
 
 
-def test_a_key_is_required():
+def test_a_key_is_required(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
     with pytest.raises(RuntimeError, match="DEEPSEEK_API_KEY"):
         DeepSeekProvider(api_key="")
 
