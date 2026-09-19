@@ -167,17 +167,25 @@ configuration rather than something derived from the request, because behind
 a proxy the request's own idea of its scheme and host is not reliable and
 Google matches the registered URI exactly.
 
-### Keeping the connection across a redeploy
+### Deployed, there are no files
 
-Consent writes `token.json`. Railway's filesystem does not survive a
-redeploy, so a deployment that should stay connected puts the token in a
-variable instead:
+`credentials.json` and `token.json` are both gitignored, so neither reaches
+a deployment. Two variables stand in, and when either is set its file is not
+consulted at all:
+
+| Variable | Contents |
+|---|---|
+| `VS_GMAIL_CREDENTIALS_JSON` | the whole downloaded OAuth client |
+| `VS_GMAIL_TOKEN_JSON` | the whole `token.json`, after connecting once |
+
+The second is what keeps the mailbox connected across a redeploy — Railway's
+filesystem does not survive one, so consent would otherwise be needed after
+every push.
 
 ```bash
-cat token.json        # paste the whole thing into VS_GMAIL_TOKEN_JSON
+cat credentials.json  # → VS_GMAIL_CREDENTIALS_JSON
+cat token.json        # → VS_GMAIL_TOKEN_JSON
 ```
-
-When that variable is set the file is not read at all, and nothing writes one.
 
 ### Seeding, reading, labelling
 

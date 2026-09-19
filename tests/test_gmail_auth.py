@@ -39,6 +39,7 @@ DESKTOP_CLIENT = {
 def clean(monkeypatch, tmp_path):
     """No stray token from the developer's own machine, and no stale state."""
     monkeypatch.delenv(gmail.TOKEN_ENV, raising=False)
+    monkeypatch.delenv(gmail.CREDENTIALS_ENV, raising=False)
     monkeypatch.delenv("VS_OAUTH_REDIRECT", raising=False)
     monkeypatch.setattr(gmail, "CREDENTIALS", tmp_path / "credentials.json")
     monkeypatch.setattr(gmail, "TOKEN", tmp_path / "token.json")
@@ -79,6 +80,31 @@ def test_a_desktop_client_is_refused_by_name():
         gmail.client_config()
     assert "Desktop app" in str(raised.value)
     assert "Web application" in str(raised.value)
+
+
+def test_the_environment_can_hold_the_client(monkeypatch):
+    """A deployment has no file to read: the download is gitignored, so it
+    never reaches the image."""
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, json.dumps(WEB_CLIENT))
+    assert gmail.client_config() == WEB_CLIENT
+    assert gmail.configured() is True
+
+
+def test_the_environment_wins_over_the_file(monkeypatch):
+    write(DESKTOP_CLIENT)
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, json.dumps(WEB_CLIENT))
+    assert "web" in gmail.client_config()
+
+
+def test_the_wrong_client_type_is_caught_in_the_environment_too(monkeypatch):
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, json.dumps(DESKTOP_CLIENT))
+    with pytest.raises(gmail.NotAuthorised) as raised:
+        gmail.client_config()
+    assert "Desktop app" in str(raised.value)
+
+
+def test_nothing_configured_is_reported_as_such():
+    assert gmail.configured() is False
 
 
 def test_a_missing_client_file_explains_the_setup():

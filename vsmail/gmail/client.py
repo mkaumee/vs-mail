@@ -35,6 +35,11 @@ SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 #: "Web application".
 CREDENTIALS = Path(os.environ.get("VS_GMAIL_CREDENTIALS", "credentials.json"))
 
+#: The same client as JSON. A deployment has no file to read: the download is
+#: gitignored, so it is never in the image. Set this and the file is not
+#: consulted at all.
+CREDENTIALS_ENV = "VS_GMAIL_CREDENTIALS_JSON"
+
 #: Where the authorised token is written after consent.
 TOKEN = Path(os.environ.get("VS_GMAIL_TOKEN", "token.json"))
 
@@ -62,7 +67,9 @@ Gmail needs a one-off setup that cannot be automated:
   3. Add an authorised redirect URI for every place this app runs:
        {DEFAULT_REDIRECT}
        https://<your-railway-domain>/gmail/auth/callback
-  4. Download the client and save it as {CREDENTIALS} in the repository root.
+  4. Download the client. Locally, save it as {CREDENTIALS} in the repository
+     root; deployed, put its contents in {CREDENTIALS_ENV} instead, since the
+     download is gitignored and never reaches the image.
   5. On the OAuth consent screen, add the mailbox account as a Test user.
      The app is unverified, so only listed accounts may authorise it.
 
@@ -77,7 +84,7 @@ redirect on a loopback port. There is no browser on a deployed server, so
 that flow has nowhere to run.
 
 Create a new OAuth client of type "Web application" instead, add the
-redirect URIs listed in the setup help, and replace {CREDENTIALS}.
+redirect URIs listed in the setup help, and replace it.
 """
 
 
@@ -86,14 +93,20 @@ def redirect_uri() -> str:
 
 
 def client_config() -> dict:
-    """The OAuth client, checked for being the right kind of client.
+    """The OAuth client, from the environment or from disk.
 
-    Downloading a Desktop client by mistake is an easy thing to do and the
-    resulting failure is otherwise a KeyError deep inside a library.
+    Checked for being the right kind of client, because downloading a Desktop
+    one by mistake is easy and the resulting failure is otherwise a KeyError
+    deep inside a library.
     """
-    if not CREDENTIALS.is_file():
+    raw = os.environ.get(CREDENTIALS_ENV)
+    if raw:
+        config = json.loads(raw)
+    elif CREDENTIALS.is_file():
+        config = json.loads(CREDENTIALS.read_text())
+    else:
         raise NotAuthorised(SETUP_HELP)
-    config = json.loads(CREDENTIALS.read_text())
+
     if "web" not in config:
         raise NotAuthorised(WRONG_CLIENT_TYPE if "installed" in config else SETUP_HELP)
     return config
@@ -166,6 +179,15 @@ def stored_token() -> dict | None:
     if TOKEN.is_file():
         return json.loads(TOKEN.read_text())
     return None
+
+
+def configured() -> bool:
+    """Whether there is an OAuth client to authorise against at all.
+
+    Not the same as being authorised: a deployment can be configured and
+    still waiting for someone to approve the consent screen.
+    """
+    return bool(os.environ.get(CREDENTIALS_ENV)) or CREDENTIALS.is_file()
 
 
 def authorised() -> bool:

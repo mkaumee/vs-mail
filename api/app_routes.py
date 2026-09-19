@@ -195,10 +195,10 @@ def _drop_stale(now: float) -> None:
 @app_router.get("/gmail/status")
 async def gmail_status() -> dict:
     """Whether Gmail is usable, without throwing if it is not set up."""
-    from vsmail.gmail.client import CREDENTIALS, address, authorised, service
+    from vsmail.gmail.client import address, authorised, configured, service
 
     info: dict = {
-        "credentials_present": CREDENTIALS.is_file(),
+        "credentials_present": configured(),
         "authorised": authorised(),
         "ready": False,
         "mailbox": None,
