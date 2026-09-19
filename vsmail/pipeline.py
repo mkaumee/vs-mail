@@ -165,16 +165,27 @@ async def process_all(
     concurrency: int = DEFAULT_CONCURRENCY,
     emails: list[EmailRecord] | None = None,
     store=None,
+    progress=None,
 ) -> list[Processed]:
     """Process the inbox, preserving email order in the result.
 
     `emails` narrows the run to a subset, which is how a paid provider gets
     smoke-tested on a handful of emails before spending a full pass.
+    `progress(done, total)` is called as each finishes, so a browser watching
+    a two-minute run has something to show.
     """
     emails = bundle.emails() if emails is None else emails
     limit = asyncio.Semaphore(concurrency)
 
     failures: list[tuple[str, str]] = []
+    finished = 0
+    total = len(emails)
+
+    def tick() -> None:
+        nonlocal finished
+        finished += 1
+        if progress is not None:
+            progress(finished, total)
 
     async def one(email: EmailRecord) -> Processed:
         async with limit:
@@ -194,6 +205,8 @@ async def process_all(
                         review_reason="unreadable",
                     )
                 )
+            finally:
+                tick()
 
     results = list(await asyncio.gather(*(one(email) for email in emails)))
     if failures:

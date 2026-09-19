@@ -34,3 +34,10 @@ review.json
 credentials.json
 token.json
 .gmail-cache/
+
+# Frontend build artefacts
+frontend/node_modules/
+frontend/.vite/
+
+# Run results shown by the app
+results.json

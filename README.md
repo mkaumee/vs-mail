@@ -59,6 +59,32 @@ python scripts/score_devset.py submission.deepseek.json
 A subset run is labelled as such and is **not** a submittable file — it does not
 cover all 520 emails.
 
+## The web app
+
+Everything below can be driven from a browser: process the inbox, seed and
+clear Gmail, watch for new mail, and work the review queue. No terminal
+during a demo.
+
+```bash
+cd frontend && npm install && npm run build && cd ..
+export VS_SERVICE_TOKEN=pick-something
+uvicorn api.main:app
+```
+
+Open <http://localhost:8000>. The page asks for that token once and keeps it
+in the browser, so the built app carries no credential of its own.
+
+The build lands in `api/static`, which the same FastAPI app serves — one URL,
+one deploy, no CORS. For frontend work with hot reload, `npm run dev` in
+`frontend/` proxies the API.
+
+The inbox is laid out as lanes rather than one long list sorted by arrival,
+because the lane that matters is the one holding documents to check.
+Selecting an email shows all seven fields side by side, with the differing
+ones marked — and, where two values are written differently but mean the
+same thing, a note saying why it was accepted. Proving the absence of a false
+alarm is otherwise invisible.
+
 ## The service
 
 ```bash
