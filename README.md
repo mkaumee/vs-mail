@@ -187,6 +187,51 @@ cat credentials.json  # → VS_GMAIL_CREDENTIALS_JSON
 cat token.json        # → VS_GMAIL_TOKEN_JSON
 ```
 
+### The seven-day token
+
+**`gmail.modify` is a *restricted* scope.** An External consent screen left in
+Testing issues refresh tokens that expire after **seven days**. Yours will stop
+working about a week after you connect, and the failure is quiet — the mailbox
+simply stops being readable.
+
+**Publishing the consent screen is not the fix.** A restricted scope pulls in
+Google's full verification *plus* a third-party CASA security assessment: weeks
+of calendar time and real money. It is also what makes the console start
+demanding a home page, a privacy policy and verified authorized domains —
+fields that are optional while the app stays in Testing, and that a
+`*.up.railway.app` domain cannot satisfy anyway, because Railway owns it and it
+cannot be verified as yours. The Internal user type sidesteps all of it but
+needs a Google Workspace organisation, which a `@gmail.com` account does not
+have.
+
+So treat it as the operating condition it is:
+
+- **Stay in Testing.** Leave home page, privacy policy and authorized domains
+  blank. Add the mailbox under **Test users**.
+- **Re-connect weekly**, and on the morning of a demo whether or not it looks
+  like it needs it.
+
+The app reports this rather than failing silently: a refresh that comes back
+`invalid_grant` shows as an expired authorisation with an invitation to press
+Connect Gmail again, and `/gmail/status` carries `expired: true`.
+
+### When it will not connect
+
+`GET /gmail/status` answers this in one request:
+
+| Field | Meaning |
+|---|---|
+| `credentials_source` | `environment`, `file`, or `null` — where the OAuth client was read from |
+| `token_source` | the same, for the stored token |
+| `credentials_present` | whether the client actually **parsed**, not just whether a variable is set |
+| `expired` | the seven-day token has run out; re-connect |
+| `error` | why, when something was found and could not be used |
+
+`credentials_source: null` means nothing was set. `credentials_source:
+"environment"` with `credentials_present: false` means something was set and
+cannot be parsed — usually a paste that kept the `VS_GMAIL_CREDENTIALS_JSON=`
+prefix, or one that was cut short. The error names which.
+
 ### Seeding, reading, labelling
 
 ```bash
