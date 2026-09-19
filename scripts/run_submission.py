@@ -31,6 +31,44 @@ def make_provider(name: str):
     raise SystemExit(f"unknown provider: {name}")
 
 
+def _source(document) -> str:
+    """Where a document's values came from — text, or pages read as images."""
+    if document is None:
+        return "absent"
+    if not document.readable:
+        return f"unreadable ({document.error})"
+    if document.images:
+        return f"{len(document.images)} scanned page(s), read as images"
+    return f"{len(document.text)} chars of text"
+
+
+def explain(processed) -> None:
+    """Print the evidence behind each verdict.
+
+    For a scan there is no second opinion to check a verdict against, so the
+    values actually read are the only way to tell a correct reading from a
+    confident-looking invention.
+    """
+    from vsmail.compare import compare_all
+
+    print("\n" + "=" * 78)
+    for item in processed:
+        verdict = item.verdict
+        print(f"\n{verdict.email_id}  {verdict.category}  {verdict.status}"
+              + (f"  ({verdict.review_reason})" if verdict.review_reason else ""))
+        print(f"  SI: {_source(item.si)}")
+        print(f"  BL: {_source(item.bl)}")
+        if item.extraction is None:
+            print("  (no extraction — decided before reading the documents)")
+            continue
+        for comparison in compare_all(item.extraction):
+            mark = "  " if comparison.equal else "->"
+            print(f"  {mark} {comparison.field:<18} SI {comparison.si_value!r}")
+            print(f"     {'':<18} BL {comparison.bl_value!r}"
+                  + (f"   [{comparison.note}]" if comparison.note else ""))
+    print("\n" + "=" * 78)
+
+
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default=str(DEFAULT_SOURCE))
@@ -47,6 +85,11 @@ async def main() -> int:
         nargs="+",
         metavar="EMAIL_ID",
         help="process only these emails, e.g. --only email_004 email_512",
+    )
+    parser.add_argument(
+        "--explain",
+        action="store_true",
+        help="print the values read from each document, so a verdict can be audited",
     )
     args = parser.parse_args()
 
@@ -70,12 +113,16 @@ async def main() -> int:
 
     started = time.monotonic()
     try:
-        verdicts = await pipeline.run(
+        processed = await pipeline.process_all(
             bundle, provider, concurrency=args.concurrency, emails=emails
         )
     finally:
         await provider.aclose()
     elapsed = time.monotonic() - started
+
+    verdicts = [item.verdict for item in processed]
+    if args.explain:
+        explain(processed)
 
     result = submission.build(verdicts)
     expected = [e.email_id for e in (emails if partial else bundle.emails())]

@@ -98,3 +98,31 @@ async def test_a_subset_run_processes_only_what_it_is_given(bundle):
     emails = [e for e in bundle.emails() if e.email_id in wanted]
     results = await pipeline.run(bundle, MockProvider(), emails=emails)
     assert [v.email_id for v in results] == wanted
+
+
+async def test_processing_keeps_the_evidence_behind_a_verdict(bundle):
+    """--explain needs the values read, not just the verdict."""
+    emails = [e for e in bundle.emails() if e.email_id == "email_004"]
+    processed = await pipeline.process_all(bundle, MockProvider(), emails=emails)
+    item = processed[0]
+    assert item.verdict.status == "MISMATCH"
+    assert item.extraction is not None
+    assert item.extraction.si["consignee"] == "EAST BRIGHT FZ-LLC"
+    assert item.extraction.bl["consignee"] == "UAB NOVAKOPA"
+    assert item.si.text and item.bl.text
+
+
+async def test_a_scan_records_that_it_was_read_as_images(bundle):
+    """The audit trail must show a scan was images, not empty text."""
+    emails = [e for e in bundle.emails() if e.email_id == "email_512"]
+    item = (await pipeline.process_all(bundle, MockProvider(), emails=emails))[0]
+    assert item.si.images and item.bl.images
+    assert item.si.text == ""
+
+
+async def test_an_email_decided_before_reading_has_no_extraction(bundle):
+    """email_511's BL will not open, so nothing was ever extracted."""
+    emails = [e for e in bundle.emails() if e.email_id == "email_511"]
+    item = (await pipeline.process_all(bundle, MockProvider(), emails=emails))[0]
+    assert item.verdict.review_reason == "unreadable"
+    assert item.extraction is None

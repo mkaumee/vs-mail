@@ -102,7 +102,24 @@ python scripts/run_submission.py --provider remote
 ## A note on the score
 
 `scripts/score_devset.py` and `POST /submit` report a **dev-set score, not the
-real one**. There is no ground truth in the bundle, so both grade against 48
+real one**. There is no ground truth in the bundle, so both grade against 51
 labels written by hand in `tests/devset.json`. The number measures agreement with
 our own reading and is useful for catching regressions. Where a run disagrees with
 a label, re-read the label before changing the pipeline.
+
+The offline provider scores 1.000 on the weighted axes but only 0.824 on review
+reasons, because it cannot read the three scanned emails and escalates them
+instead of comparing them. That gap is the measurable difference a vision-capable
+provider makes.
+
+### Auditing a verdict
+
+```bash
+python scripts/run_submission.py --provider deepseek --only email_512 --explain
+python scripts/export_pages.py email_512
+```
+
+The first prints the values read from each document; the second writes the
+scanned pages out as PNGs. For an image-only document there is no second opinion
+to check against, so putting the two side by side is the only way to tell a
+correct reading from a confident-looking invention.

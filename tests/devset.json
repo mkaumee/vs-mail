@@ -1,5 +1,5 @@
 {
-  "_README": "HAND-WRITTEN LABELS, NOT GROUND TRUTH. Each was written by reading the email body and, for comparison requests, the raw values in both documents - not by running the pipeline. Anything scored against these is a dev-set score: it measures agreement with our own reading. Where a run disagrees, re-read the label before changing the pipeline. Emails 512-514 are image-only scans and are deliberately unlabelled, since their outcome cannot be read without vision.",
+  "_README": "HAND-WRITTEN LABELS, NOT GROUND TRUTH. Each was written by reading the email body and, for comparison requests, the raw values in both documents - not by running the pipeline. Anything scored against these is a dev-set score: it measures agreement with our own reading. Where a run disagrees, re-read the label before changing the pipeline. Emails 512-514 are image-only scans; their pages were rasterized with scripts/export_pages.py and read by eye. All three agree on all seven fields, so all three are OK. The offline provider cannot read them and escalates instead, which is an honest limitation and shows up as a lower review-reason accuracy rather than as a wrong answer.",
   "labels": {
     "email_009": {
       "category": "BL_COMPARISON",
@@ -308,6 +308,24 @@
     },
     "email_116": {
       "category": "SPAM",
+      "status": "OK",
+      "review_reason": null,
+      "defect_fields": []
+    },
+    "email_512": {
+      "category": "BL_COMPARISON",
+      "status": "OK",
+      "review_reason": null,
+      "defect_fields": []
+    },
+    "email_513": {
+      "category": "BL_COMPARISON",
+      "status": "OK",
+      "review_reason": null,
+      "defect_fields": []
+    },
+    "email_514": {
+      "category": "BL_COMPARISON",
       "status": "OK",
       "review_reason": null,
       "defect_fields": []

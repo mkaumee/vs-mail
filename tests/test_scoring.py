@@ -40,11 +40,12 @@ def test_the_devset_covers_every_review_reason(labels):
     assert reasons == set(REVIEW_REASONS)
 
 
-def test_the_scans_are_left_unlabelled(labels):
-    """Their outcome cannot be read without vision, so labelling them would
-    bake our blind spot into the measurement."""
+def test_the_scans_are_labelled_from_their_rasterized_pages(labels):
+    """Read by eye via scripts/export_pages.py. All three agree on all seven
+    fields, so a provider that can read them should return OK."""
     for email_id in ("email_512", "email_513", "email_514"):
-        assert email_id not in labels
+        assert labels[email_id]["status"] == "OK"
+        assert labels[email_id]["defect_fields"] == []
 
 
 def test_a_perfect_submission_scores_one(labels):
@@ -101,7 +102,13 @@ def test_a_rare_category_weighs_as_much_as_a_common_one(labels):
     assert board.classification_macro_f1 < 0.85
 
 
-def test_the_mock_baseline_agrees_with_the_devset(bundle, labels):
+def test_the_mock_baseline_disagrees_only_where_it_cannot_see(bundle, labels):
+    """The offline provider matches our reading everywhere except the scans.
+
+    It escalates those three rather than guessing, which is the correct
+    behaviour for a provider without vision — but it is still a disagreement,
+    and the dev set records it as one instead of hiding it.
+    """
     import asyncio
 
     from vsmail import pipeline, submission as sub
@@ -109,5 +116,9 @@ def test_the_mock_baseline_agrees_with_the_devset(bundle, labels):
 
     verdicts = asyncio.run(pipeline.run(bundle, MockProvider()))
     board = score(sub.build(verdicts), labels)
-    assert board.disagreements == [], "the offline baseline should match our reading"
-    assert board.review_accuracy == 1.0
+
+    scans = {"email_512", "email_513", "email_514"}
+    for line in board.disagreements:
+        assert line.split()[0] in scans, f"unexpected disagreement: {line}"
+    assert len(board.disagreements) == len(scans)
+    assert board.review_accuracy < 1.0, "the blind spot must show in the score"
