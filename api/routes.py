@@ -11,11 +11,12 @@ import os
 from fastapi import APIRouter, Depends, HTTPException
 
 from api.auth import require_token
-from api.schemas import CompareIn, EmailIn, ExtractIn, RunIn, SubmitIn
+from api.schemas import CompareIn, EmailIn, ExtractIn, ResolveIn, RunIn, SubmitIn
 from vsmail import pipeline, submission as submission_module
 from vsmail.compare import compare_all, decide
 from vsmail.inbox import Bundle
 from vsmail.models import Document, EmailRecord
+from vsmail.review import ReviewStore
 from vsmail.scoring import score
 
 router = APIRouter()
@@ -178,3 +179,102 @@ async def submit(payload: SubmitIn) -> dict:
 @guarded.get("/sample_submission")
 async def sample_submission() -> dict:
     return Bundle().sample_submission()
+
+
+def _store() -> ReviewStore:
+    return ReviewStore(os.environ.get("VS_REVIEW_STORE", "review.json"))
+
+
+@guarded.get("/review")
+async def review_queue() -> dict:
+    """Cases waiting on a person, worst first.
+
+    Ordered by what a wrong value actually costs — consignee and notify party
+    carry legal title, gross weight is a SOLAS declaration — rather than by
+    arrival.
+    """
+    queue = _store().queue()
+    return {
+        "open": len(queue),
+        "cases": [
+            {
+                "email_id": case.email_id,
+                "reason": case.reason,
+                "severity": case.severity,
+                "fields_at_issue": case.evidence.get("fields_at_issue") or [],
+                "concerns": case.evidence.get("concerns") or [],
+            }
+            for case in queue
+        ],
+    }
+
+
+@guarded.get("/review/{email_id}")
+async def review_case(email_id: str) -> dict:
+    case = _store().get(email_id)
+    if case is None:
+        raise HTTPException(404, detail=f"no case for {email_id}")
+    return {
+        "email_id": case.email_id,
+        "reason": case.reason,
+        "state": case.state,
+        "severity": case.severity,
+        "opened_at": case.opened_at,
+        "evidence": case.evidence,
+        "corrections": case.corrections,
+        "settled": case.settled,
+        "audit": case.audit,
+    }
+
+
+@guarded.post("/review/{email_id}/resolve")
+async def review_resolve(email_id: str, payload: ResolveIn) -> dict:
+    """Record a decision.
+
+    Supplied values are compared like any other reading on the next run; the
+    verdict is never written directly. `settle` is the exception and is
+    recorded as such.
+    """
+    store = _store()
+    try:
+        case = store.resolve(
+            email_id,
+            by=payload.by,
+            confirm=payload.confirm,
+            si=payload.si,
+            bl=payload.bl,
+            settle=payload.settle,
+            note=payload.note,
+        )
+    except KeyError:
+        raise HTTPException(404, detail=f"no case for {email_id}")
+    except ValueError as exc:
+        raise HTTPException(422, detail=str(exc))
+    return {"email_id": case.email_id, "state": case.state, "audit": case.audit}
+
+
+@guarded.post("/review/{email_id}/retry")
+async def review_retry(email_id: str) -> dict:
+    """Reprocess one email, without redoing the other 519.
+
+    A processing failure should be recoverable on its own.
+    """
+    bundle = Bundle()
+    store = _store()
+    try:
+        email = bundle.get(email_id)
+    except Exception:
+        raise HTTPException(404, detail=f"no such email: {email_id}")
+
+    provider = build_provider()
+    try:
+        processed = await pipeline.process_email(bundle, provider, email, store=store)
+    finally:
+        await provider.aclose()
+
+    store.sync([processed])
+    return {
+        "email_id": email_id,
+        "verdict": processed.verdict.to_submission_entry(),
+        "concerns": list(processed.concerns),
+    }

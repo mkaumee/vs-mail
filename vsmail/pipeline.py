@@ -16,6 +16,7 @@ from vsmail.documents.kinds import DISQUALIFYING
 from vsmail.inbox import Bundle
 from vsmail.llm.base import Provider
 from vsmail.models import Document, EmailRecord, Extraction, Verdict
+from vsmail.review import apply_corrections
 
 #: Concurrent in-flight emails. High enough to keep a 520-email run brisk,
 #: low enough not to trip provider rate limits.
@@ -53,9 +54,14 @@ def _load(bundle: Bundle, email: EmailRecord, role: str) -> Document | None:
 
 
 async def process_email(
-    bundle: Bundle, provider: Provider, email: EmailRecord
+    bundle: Bundle, provider: Provider, email: EmailRecord, store=None
 ) -> Processed:
-    """Classify one email and, if it is a comparison request, decide it."""
+    """Classify one email and, if it is a comparison request, decide it.
+
+    `store` supplies any values a reviewer has already corrected. They are
+    overlaid on what the provider read and then compared normally, so a
+    resolved email reaches its verdict through the same path as any other.
+    """
     classification = await provider.classify(email)
     category = classification.category
 
@@ -87,6 +93,32 @@ async def process_email(
         or bl.doc_kind in DISQUALIFYING
     )
     extraction = None if blocked else await extract_with_consensus(provider, si, bl)
+
+    corrections = store.corrections_for(email.email_id) if store else {}
+    if extraction is not None and corrections:
+        extraction = apply_corrections(extraction, corrections)
+        concerns.append("includes values corrected by a reviewer")
+
+    settled = store.settlement_for(email.email_id) if store else None
+    if settled:
+        # The one path that does not run the comparator. Recorded as such so
+        # a forced outcome is never mistaken for a computed one.
+        concerns.append("outcome set by a reviewer, not compared")
+        return Processed(
+            verdict=Verdict(
+                email_id=email.email_id,
+                category=category,
+                status=settled.get("status", "OK"),
+                review_reason=settled.get("review_reason"),
+                has_defect=bool(settled.get("defect_fields")),
+                defect_fields=list(settled.get("defect_fields") or []),
+            ),
+            extraction=extraction,
+            si=si,
+            bl=bl,
+            confidence=classification.confidence,
+            concerns=tuple(concerns),
+        )
 
     if extraction is not None and extraction.uncertain_fields:
         fields = ", ".join(extraction.uncertain_fields)
@@ -124,6 +156,7 @@ async def process_all(
     provider: Provider,
     concurrency: int = DEFAULT_CONCURRENCY,
     emails: list[EmailRecord] | None = None,
+    store=None,
 ) -> list[Processed]:
     """Process the inbox, preserving email order in the result.
 
@@ -138,7 +171,7 @@ async def process_all(
     async def one(email: EmailRecord) -> Processed:
         async with limit:
             try:
-                return await process_email(bundle, provider, email)
+                return await process_email(bundle, provider, email, store=store)
             except Exception as exc:
                 # The email still needs an entry — all 520 must be present —
                 # and it is escalated rather than quietly defaulted to OK, so
@@ -167,10 +200,11 @@ async def run(
     provider: Provider,
     concurrency: int = DEFAULT_CONCURRENCY,
     emails: list[EmailRecord] | None = None,
+    store=None,
 ) -> list[Verdict]:
     """Process the inbox and return verdicts alone.
 
     Use `process_all` when the evidence behind each verdict is wanted too.
     """
-    processed = await process_all(bundle, provider, concurrency, emails)
+    processed = await process_all(bundle, provider, concurrency, emails, store)
     return [item.verdict for item in processed]

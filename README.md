@@ -99,6 +99,40 @@ export VS_SERVICE_TOKEN=<the same token>
 python scripts/run_submission.py --provider remote
 ```
 
+## Human review
+
+The pipeline escalates what it cannot settle. This is where a person settles it.
+
+```bash
+python scripts/run_submission.py --provider mock      # opens cases
+python scripts/review.py list                         # the queue, worst first
+python scripts/review.py show email_516               # the evidence
+python scripts/review.py resolve email_516 \
+  --by ops.mitchelle --supply "si.gross_weight_kg=235,550 KG"
+python scripts/run_submission.py --provider mock      # the verdict changes
+```
+
+**A resolution never edits a verdict.** The reviewer supplies or corrects an
+*input* and the comparator runs again over it, so a corrected email reaches
+its outcome by exactly the path an uncorrected one does. Supply a wrong value
+and you get a `MISMATCH`, not a rubber stamp. `--settle-status` can force an
+outcome without values, and is recorded separately because it is the one
+action that bypasses the comparator.
+
+Corrections persist in `review.json` (gitignored) and are re-applied on later
+runs — without that, the pipeline's statelessness would lose every decision on
+the next run.
+
+The queue is ordered by what a wrong value costs: consignee and notify party
+are critical because they carry legal title to the cargo and drive customs
+clearance, gross weight is high because it is a SOLAS VGM declaration, and a
+document that is missing, unreadable or simply the wrong document outranks any
+single field because it blocks the whole comparison.
+
+The same thing over HTTP: `GET /review`, `GET /review/{id}`,
+`POST /review/{id}/resolve`, `POST /review/{id}/retry` — the last reprocesses
+one email without redoing the other 519.
+
 ## A note on the score
 
 `scripts/score_devset.py` and `POST /submit` report a **dev-set score, not the

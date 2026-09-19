@@ -38,3 +38,17 @@ class RunIn(BaseModel):
 
 class SubmitIn(BaseModel):
     submission: dict
+
+
+class ResolveIn(BaseModel):
+    """What a reviewer decided about a case."""
+
+    by: str = "reviewer"
+    confirm: bool = False
+    #: Values supplied or corrected, by field. These are compared normally.
+    si: dict[str, str] = Field(default_factory=dict)
+    bl: dict[str, str] = Field(default_factory=dict)
+    #: An outcome forced without values. Bypasses the comparator, so it is
+    #: recorded distinctly from a correction.
+    settle: dict | None = None
+    note: str = ""

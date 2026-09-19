@@ -120,3 +120,75 @@ def test_submit_scores_against_the_devset_and_says_so(client, auth):
     assert "devset_score" in body
     assert "final_score" not in body, "this scorer must never claim to be the real one"
     assert "not ground truth" in body["note"]
+
+
+@pytest.fixture
+def review_client(monkeypatch, tmp_path, bundle):
+    """A client backed by a store seeded from a real run."""
+    import asyncio
+
+    from vsmail import pipeline
+    from vsmail.llm.mock import MockProvider
+    from vsmail.review import ReviewStore
+
+    path = tmp_path / "review.json"
+    store = ReviewStore(path)
+    store.sync(asyncio.run(pipeline.process_all(bundle, MockProvider())))
+
+    monkeypatch.setenv("VS_SERVICE_TOKEN", TOKEN)
+    monkeypatch.setenv("VS_PROVIDER", "mock")
+    monkeypatch.setenv("VS_REVIEW_STORE", str(path))
+    return TestClient(app)
+
+
+def test_the_queue_needs_a_token(review_client):
+    assert review_client.get("/review").status_code == 401
+
+
+def test_the_queue_lists_open_cases_worst_first(review_client, auth):
+    body = review_client.get("/review", headers=auth).json()
+    assert body["open"] == 20
+    severities = [case["severity"] for case in body["cases"]]
+    assert severities == sorted(severities, reverse=True)
+
+
+def test_a_case_carries_the_evidence_behind_it(review_client, auth):
+    body = review_client.get("/review/email_516", headers=auth).json()
+    assert body["reason"] == "missing_value"
+    assert body["evidence"]["values"]["gross_weight_kg"]["si"] is None
+    assert body["evidence"]["values"]["gross_weight_kg"]["bl"] == "235,550 KG"
+
+
+def test_an_unknown_case_is_a_404(review_client, auth):
+    assert review_client.get("/review/email_999", headers=auth).status_code == 404
+
+
+def test_resolving_records_the_decision(review_client, auth):
+    response = review_client.post(
+        "/review/email_516/resolve",
+        json={"by": "ops.lee", "si": {"gross_weight_kg": "235,550 KG"}},
+        headers=auth,
+    )
+    body = response.json()
+    assert body["state"] == "resolved"
+    assert any(e["by"] == "ops.lee" for e in body["audit"])
+
+
+def test_resolving_refuses_a_field_that_is_not_compared(review_client, auth):
+    response = review_client.post(
+        "/review/email_516/resolve",
+        json={"si": {"vessel_name": "X"}},
+        headers=auth,
+    )
+    assert response.status_code == 422
+
+
+def test_retry_reprocesses_one_email_with_the_correction_applied(review_client, auth):
+    review_client.post(
+        "/review/email_516/resolve",
+        json={"by": "ops", "si": {"gross_weight_kg": "235,550 KG"}},
+        headers=auth,
+    )
+    body = review_client.post("/review/email_516/retry", headers=auth).json()
+    assert body["verdict"]["status"] == "OK"
+    assert any("corrected by a reviewer" in c for c in body["concerns"])

@@ -90,6 +90,14 @@ async def main() -> int:
         help="process only these emails, e.g. --only email_004 email_512",
     )
     parser.add_argument(
+        "--no-review",
+        action="store_true",
+        help="ignore the review store: no corrections applied, no cases opened",
+    )
+    parser.add_argument(
+        "--review-store", default="review.json", help="where cases are kept"
+    )
+    parser.add_argument(
         "--explain",
         action="store_true",
         help="print the values read from each document, so a verdict can be audited",
@@ -98,6 +106,12 @@ async def main() -> int:
 
     bundle = Bundle(args.source)
     provider = make_provider(args.provider)
+
+    store = None
+    if not args.no_review:
+        from vsmail.review import ReviewStore
+
+        store = ReviewStore(args.review_store)
 
     emails = bundle.emails()
     if args.only:
@@ -117,13 +131,19 @@ async def main() -> int:
     started = time.monotonic()
     try:
         processed = await pipeline.process_all(
-            bundle, provider, concurrency=args.concurrency, emails=emails
+            bundle, provider, concurrency=args.concurrency, emails=emails, store=store
         )
     finally:
         await provider.aclose()
     elapsed = time.monotonic() - started
 
     verdicts = [item.verdict for item in processed]
+    if store is not None:
+        counts = store.sync(processed)
+        print(
+            f"  review queue: {counts['opened']} opened, "
+            f"{counts['already_open']} still open, {counts['auto_closed']} closed"
+        )
     if args.explain:
         explain(processed)
 
