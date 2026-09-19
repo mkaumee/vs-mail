@@ -1,6 +1,7 @@
 # VS-Mail — Build Plan
 
-**Status:** Draft v1 — under discussion, not final
+**Status:** v2 — scoring spine built; corrections from the build folded in
+**Branch:** `agent-service`
 **Context:** Hackathon. Shipping document verification (SI vs BL discrepancy detection).
 
 ---
@@ -99,9 +100,11 @@ Two consequences that should drive our decisions:
 `loader.py` supports an HTTP source: `Inbox("http://host:8080")`, and
 `inbox.submit(submission)` returns a scoreboard with `final_score`.
 
-**If the organizers give us that server URL, we get an automated eval loop.** That
-is worth more than any feature on the backlog — it turns tuning from guesswork into
-measurement. **Ask for it early.**
+**The organizers are not providing that URL**, so we host the scorer ourselves —
+see §5b. It grades against labels we wrote, so what it reports is a `devset_score`,
+never a `final_score`. That distinction is load-bearing: a confident number computed
+against our own guesses is worse than no number at all, because a number reads as
+truth. What it genuinely buys us is regression detection.
 
 ---
 
@@ -138,11 +141,16 @@ measurement. **Ask for it early.**
 | 507, 509 | SI present, BL absent | `missing_attachment` |
 | 511, 515 | BL PDF is **corrupt** — PyMuPDF raises `FileDataError`, "no objects found" | `unreadable` |
 | 512, 513, 514 | Both PDFs are **image-only scans** — zero text layer, one image per page | (must be read, not escalated) |
+| 519, 520 | The **SI leaves a required field blank** — `SHIPPER:` and `CONSIGNEE:` with nothing after them | `missing_value` |
+
+That accounts for all four review reasons. The last row was found while building
+the parser, not from the brief.
 
 ### OCR: needed, but only barely
 
-Of 28 PDFs, **22 have a clean text layer and 6 are image-only** — and those 6 are
-just three emails (512, 513, 514). Everything else parses with ordinary libraries.
+Of 28 PDFs, **20 have a clean text layer, 6 are image-only and 2 are corrupt**.
+The six scans are just three emails (512, 513, 514). Everything else parses with
+ordinary libraries.
 
 So the vision path is required, but it is a **narrow fallback**, not the main road:
 try text extraction first, fall back to rasterize-and-send-to-model only when the
@@ -262,6 +270,21 @@ Reason: "MAERSK LINE" vs "Maersk Line" must be a non-event. An LLM asked
 a failure mode — this is exactly where accuracy points get lost. Extraction is the
 LLM's strength; judgment should be deterministic code we control and can test.
 
+### ⚠️ Ports compare on the name, never on the UN/LOCODE
+
+An earlier draft of this plan said to prefer the code when both documents carry
+one. **That is wrong for this dataset.** `email_119` reads `PORT KLANG (WESTPORT),
+MALAYSIA (MYPKG)` against `SINGAPORE, SINGAPORE (MYPKG)`: the code was carried over
+unchanged while the port itself was altered, so comparing codes would hide a real
+defect. Conversely `email_516` adds a code on one side only, which is not a defect.
+Strip the code, compare the name.
+
+The other normalization rules that matter, all confirmed against real pairs:
+digit grouping and unit spelling are folded (`243588` ≡ `243,588`), metric tonnes
+convert, the container count is the leading integer, and legal suffixes are **kept**
+because `APRIL FINE PAPER TRADING` and `APRIL FINE PAPER TRADING (MIDDLE EAST) FZE`
+are different entities.
+
 ---
 
 ## 5. Input Layer — Two Sources, One Pipeline
@@ -312,6 +335,41 @@ Identical downstream pipeline for both. If wifi dies mid-demo, flip a flag and
 nobody can tell. `FileSource` is nearly free — the organizers' `loader.py` already
 implements it, and it is also what the scoring run uses. This supersedes the earlier "Demo Mode" sketch in §6 — it's the
 same idea, done as a source abstraction rather than a separate replay harness.
+
+---
+
+## 5b. The Service — Where The Key Lives
+
+```
+React frontend  ──►  FastAPI on Railway  ──►  DeepSeek API
+                     (holds DEEPSEEK_API_KEY
+                      and VS_SERVICE_TOKEN)
+local pipeline  ──►  same service, via RemoteProvider
+```
+
+**The API key never enters this repository or a developer's machine.** It is set
+in Railway's environment variables and exists only there. Three providers sit
+behind one interface so nothing depends on a single path:
+
+| Provider | Key | Use |
+|---|---|---|
+| `MockProvider` | none | tests, CI, offline runs, the baseline submission |
+| `DeepSeekProvider` | from the environment | what runs *inside* the Railway service |
+| `RemoteProvider` | none | local runs and the frontend, via the service |
+
+**Auth fails closed.** Every route but `/health` needs `X-VS-Token`, compared in
+constant time. With no token configured the guarded routes refuse to serve rather
+than running open — an unauthenticated model endpoint on a public URL gets found
+and drained, and the bill is real.
+
+**Keep the direct path usable.** A Railway cold start or outage during judging must
+not leave the pipeline with no way to run.
+
+### The scorer we host ourselves
+
+`POST /submit` grades a submission against our own dev-set labels and returns
+`devset_score`. It deliberately has **no field named `final_score`**: this is not
+the organizers' scorer and must never be mistaken for it. See §2.
 
 ---
 
@@ -376,10 +434,10 @@ attachment?" The brief explicitly lists this as a messy-input case, and it's ~20
 ## 7. Risks
 
 ### Don't lose the rubric while building the cool stuff
-The judges have a checklist: seven fields, side-by-side values, and the literal string
-"No mismatch detected" when clean. **Build that first, make it bulletproof, then pile
-features on top.** A gorgeous inbox that fumbles the core comparison loses to a plain
-one that nails it.
+The graded artifact is `submission.json` and its schema (§2) — not a prose report,
+and not the literal string "No mismatch detected" that the brief alone implied.
+**Build that first, make it bulletproof, then pile features on top.** A gorgeous
+inbox that fumbles the core comparison loses to a plain one that nails it.
 
 ### Live Gmail on stage is a coin flip
 Wifi dies, OAuth tokens expire, APIs rate-limit at the worst moment.
@@ -408,17 +466,24 @@ Covered in §3 — provider interface behind an env var.
 2. ~~What stack?~~ **RESOLVED** — Python + FastAPI for the agent, React for the
    frontend.
 3. ~~Where is the sample data?~~ **RESOLVED** — in `sample data/`, profiled in §2b.
-4. **Do the organizers have the scoring server running?** `loader.py` implements
-   `Inbox(url).submit()` returning `final_score`. If we can get that URL, we get a
-   measured feedback loop instead of guesswork. **Highest-value open question —
-   ask them.**
-5. **Is `score_cli.py` obtainable?** The README mentions organizers running
-   `score_cli.py submission.json`. Even without ground truth, having the scorer
-   tells us exactly how each axis is computed.
+4. ~~Do the organizers have a scoring server?~~ **RESOLVED — no.** We host our
+   own (§5b), scoring against hand labels and reporting `devset_score`.
+5. **Is `score_cli.py` obtainable?** Even without ground truth, having the real
+   scorer would tell us exactly how each axis is computed, and would let us check
+   our formula against theirs. Still worth asking for.
+6. **Are the dev-set labels right?** 48 emails, labelled by reading the source.
+   The offline baseline agrees with all 48 — but the same person wrote both, so
+   that agreement confirms the pipeline does what was intended, not that the
+   labels are correct. A second pair of eyes on `tests/devset.json` is the
+   highest-value review available.
 
 ---
 
-## 9. Build Order (proposed, not yet agreed)
+## 9. Build Order
+
+**Status: phases 1-4 are built.** 165 tests pass; the offline baseline runs all
+520 emails in ~1.4s and produces a schema-valid submission in which every planted
+edge case lands correctly. Phase 5 onward is the remaining work.
 
 **Revised after reading the bundle.** The graded artifact is `submission.json` and
 nothing else. Gmail and the UI score zero in the formula, so the scoring spine goes
