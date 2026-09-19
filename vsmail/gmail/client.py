@@ -92,6 +92,31 @@ def redirect_uri() -> str:
     return os.environ.get("VS_OAUTH_REDIRECT", DEFAULT_REDIRECT)
 
 
+def _parse(raw: str, where: str) -> dict:
+    """JSON, or an explanation of the paste that probably went wrong.
+
+    Both of these values are pasted by hand into a deployment's environment,
+    and the two ways that goes wrong are specific enough to name: a Raw-Editor
+    paste leaves the `KEY=` on the front, and a truncated copy stops mid-brace.
+    Left to `json.loads` the operator gets a 500 and no idea which.
+    """
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError as exc:
+        hint = ""
+        stripped = raw.strip()
+        if "=" in stripped.split("{", 1)[0]:
+            hint = (
+                " It looks like the variable name was pasted along with the "
+                "value — the value should begin with '{'."
+            )
+        elif stripped.startswith("{") and not stripped.endswith("}"):
+            hint = " It looks truncated — the value should end with '}'."
+        raise NotAuthorised(
+            f"{where} is set but is not valid JSON ({exc.msg}).{hint}"
+        ) from exc
+
+
 def client_config() -> dict:
     """The OAuth client, from the environment or from disk.
 
@@ -101,9 +126,9 @@ def client_config() -> dict:
     """
     raw = os.environ.get(CREDENTIALS_ENV)
     if raw:
-        config = json.loads(raw)
+        config = _parse(raw, CREDENTIALS_ENV)
     elif CREDENTIALS.is_file():
-        config = json.loads(CREDENTIALS.read_text())
+        config = _parse(CREDENTIALS.read_text(), str(CREDENTIALS))
     else:
         raise NotAuthorised(SETUP_HELP)
 
@@ -175,23 +200,48 @@ def stored_token() -> dict | None:
     """
     raw = os.environ.get(TOKEN_ENV)
     if raw:
-        return json.loads(raw)
+        return _parse(raw, TOKEN_ENV)
     if TOKEN.is_file():
-        return json.loads(TOKEN.read_text())
+        return _parse(TOKEN.read_text(), str(TOKEN))
     return None
 
 
 def configured() -> bool:
-    """Whether there is an OAuth client to authorise against at all.
+    """Whether there is a usable OAuth client to authorise against.
 
     Not the same as being authorised: a deployment can be configured and
     still waiting for someone to approve the consent screen.
+
+    This has to actually parse the client, not merely find a non-empty
+    variable. Reporting a mangled paste as configured sends the operator
+    looking everywhere except at the value they pasted.
     """
-    return bool(os.environ.get(CREDENTIALS_ENV)) or CREDENTIALS.is_file()
+    try:
+        client_config()
+    except NotAuthorised:
+        return False
+    return True
+
+
+def credentials_source() -> str | None:
+    """Where the OAuth client is being read from, for diagnostics."""
+    if os.environ.get(CREDENTIALS_ENV):
+        return "environment"
+    return "file" if CREDENTIALS.is_file() else None
+
+
+def token_source() -> str | None:
+    """Where the stored token is being read from, for diagnostics."""
+    if os.environ.get(TOKEN_ENV):
+        return "environment"
+    return "file" if TOKEN.is_file() else None
 
 
 def authorised() -> bool:
-    return stored_token() is not None
+    try:
+        return stored_token() is not None
+    except NotAuthorised:
+        return False
 
 
 def credentials():
@@ -209,7 +259,22 @@ def credentials():
     if creds.valid:
         return creds
     if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+        try:
+            creds.refresh(Request())
+        except Exception as exc:
+            # Almost always `invalid_grant`, and almost always the same cause:
+            # `gmail.modify` is a restricted scope, so a consent screen left in
+            # Testing issues refresh tokens that expire after seven days.
+            # Publishing is not the fix — a restricted scope pulls in Google's
+            # full verification plus a CASA assessment, and a *.up.railway.app
+            # domain cannot be verified as ours. Re-consenting weekly is the
+            # operating condition, so this needs to say so rather than surface
+            # a library error nobody can act on.
+            raise NotAuthorised(
+                "The Gmail authorisation has expired or been revoked. Press "
+                "Connect Gmail again. Consent screens in Testing issue tokens "
+                f"that last seven days, so this is expected. ({exc})"
+            ) from exc
         store(creds)
         return creds
     raise NotAuthorised(

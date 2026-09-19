@@ -107,6 +107,51 @@ def test_nothing_configured_is_reported_as_such():
     assert gmail.configured() is False
 
 
+# -- a value that will not parse -----------------------------------------
+def test_a_raw_editor_paste_is_named(monkeypatch):
+    """Railway's Raw Editor leaves the variable name on the front of the
+    value. That is the most likely mistake here, so the error says so."""
+    monkeypatch.setenv(
+        gmail.CREDENTIALS_ENV, 'VS_GMAIL_CREDENTIALS_JSON={"web":{"client_id":"x"}}'
+    )
+    with pytest.raises(gmail.NotAuthorised) as raised:
+        gmail.client_config()
+    assert "variable name was pasted" in str(raised.value)
+
+
+def test_a_truncated_paste_is_named(monkeypatch):
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, '{"web": {"client_id": "x"')
+    with pytest.raises(gmail.NotAuthorised) as raised:
+        gmail.client_config()
+    assert "truncated" in str(raised.value)
+
+
+def test_an_unparseable_client_is_not_configured(monkeypatch):
+    """`configured()` used to test the variable was non-empty, so it reported
+    a mangled paste as working and sent the operator looking elsewhere."""
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, "not json at all")
+    assert gmail.configured() is False
+
+
+def test_an_unparseable_token_is_not_authorised(monkeypatch):
+    monkeypatch.setenv(gmail.TOKEN_ENV, "not json at all")
+    assert gmail.authorised() is False
+
+
+# -- where things are being read from ------------------------------------
+def test_the_sources_distinguish_absent_from_broken(monkeypatch):
+    assert gmail.credentials_source() is None
+    assert gmail.token_source() is None
+
+    write(WEB_CLIENT)
+    assert gmail.credentials_source() == "file"
+
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, "{}")
+    monkeypatch.setenv(gmail.TOKEN_ENV, "{}")
+    assert gmail.credentials_source() == "environment"
+    assert gmail.token_source() == "environment"
+
+
 def test_a_missing_client_file_explains_the_setup():
     with pytest.raises(gmail.NotAuthorised) as raised:
         gmail.client_config()
@@ -165,6 +210,34 @@ def test_the_redirect_is_configuration_not_guesswork(monkeypatch):
 # -- starting consent ----------------------------------------------------
 def test_starting_consent_needs_the_service_token(client):
     assert client.get("/gmail/auth/start").status_code == 401
+
+
+def test_a_mangled_variable_is_a_400_not_a_500(client, auth, monkeypatch):
+    """It used to raise JSONDecodeError out of the route, which reached the
+    operator as a bare 500 naming nothing."""
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, "VS_GMAIL_CREDENTIALS_JSON={}")
+    response = client.get("/gmail/auth/start", headers=auth)
+    assert response.status_code == 400
+    assert "not valid JSON" in response.json()["detail"]
+
+
+def test_status_reports_a_broken_value_rather_than_claiming_success(
+    client, auth, monkeypatch
+):
+    monkeypatch.setenv(gmail.CREDENTIALS_ENV, "VS_GMAIL_CREDENTIALS_JSON={}")
+    body = client.get("/gmail/status", headers=auth).json()
+    assert body["credentials_present"] is False
+    # Set-but-broken must be distinguishable from never-set.
+    assert body["credentials_source"] == "environment"
+    assert "not valid JSON" in body["error"]
+
+
+def test_status_says_nothing_is_set_when_nothing_is_set(client, auth):
+    body = client.get("/gmail/status", headers=auth).json()
+    assert body["credentials_present"] is False
+    assert body["credentials_source"] is None
+    assert body["token_source"] is None
+    assert "error" not in body
 
 
 def test_starting_consent_with_the_wrong_client_type_explains_itself(client, auth):

@@ -194,19 +194,52 @@ def _drop_stale(now: float) -> None:
 
 @app_router.get("/gmail/status")
 async def gmail_status() -> dict:
-    """Whether Gmail is usable, without throwing if it is not set up."""
-    from vsmail.gmail.client import address, authorised, configured, service
+    """Whether Gmail is usable, without throwing if it is not set up.
+
+    The two `*_source` fields exist because "it says it is not connected" is
+    otherwise an unanswerable question on a deployment: they say whether the
+    client and the token were read from the environment, from a file, or not
+    found at all, which turns the diagnosis into one request.
+    """
+    from vsmail.gmail.client import (
+        NotAuthorised,
+        address,
+        authorised,
+        client_config,
+        credentials_source,
+        service,
+        token_source,
+    )
 
     info: dict = {
-        "credentials_present": configured(),
+        "credentials_present": False,
+        "credentials_source": credentials_source(),
         "authorised": authorised(),
+        "token_source": token_source(),
         "ready": False,
+        "expired": False,
         "mailbox": None,
     }
+
+    try:
+        client_config()
+        info["credentials_present"] = True
+    except NotAuthorised as exc:
+        # Only worth reporting when something *was* found and could not be
+        # used; an absent client is what `credentials_source: null` says.
+        if info["credentials_source"] is not None:
+            info["error"] = str(exc)
+        return info
+
     if info["authorised"]:
         try:
             info["mailbox"] = address(service())
             info["ready"] = True
+        except NotAuthorised as exc:
+            # The seven-day expiry lands here. The page offers re-consent
+            # rather than the setup instructions.
+            info["expired"] = True
+            info["error"] = str(exc)
         except Exception as exc:
             info["error"] = str(exc)
     return info
@@ -227,6 +260,10 @@ async def gmail_auth_start() -> dict:
         url, state, verifier = authorization_url()
     except NotAuthorised as exc:
         raise HTTPException(400, detail=str(exc))
+    except Exception as exc:
+        # Anything else is still a setup problem from where the operator sits,
+        # and a bare 500 tells them nothing about which value to go and look at.
+        raise HTTPException(400, detail=f"Gmail could not be set up: {exc}")
 
     now = time.time()
     _drop_stale(now)
