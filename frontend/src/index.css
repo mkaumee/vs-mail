@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+/* The token names and the OKLCH scale come from Greenlit's design system, so
+   the shadcn components below work unmodified. Two departures, both
+   deliberate:
+
+   1. A dark theme actually exists here. Greenlit's components carry `dark:`
+      utilities but nothing ever defines the tokens they would read, so its
+      dark mode is inert. Ours was working before this port and dropping it
+      would be a regression, so the palette is carried across into the same
+      token names.
+
+   2. Four status roles are added — defect, review, clean, uncertain. They are
+      the product: a field that differs, a case waiting on a person, a check
+      that passed, a reading the model was unsure of. Expressing those through
+      `destructive` and `secondary` would flatten four meanings into two. */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-defect: var(--defect);
+  --color-defect-bg: var(--defect-bg);
+  --color-review: var(--review);
+  --color-review-bg: var(--review-bg);
+  --color-clean: var(--clean);
+  --color-clean-bg: var(--clean-bg);
+  --color-uncertain: var(--uncertain);
+  --color-uncertain-bg: var(--uncertain-bg);
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+}
+
+:root {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+
+  --defect: oklch(0.505 0.168 25.5);
+  --defect-bg: oklch(0.955 0.021 25.5);
+  --review: oklch(0.545 0.122 68);
+  --review-bg: oklch(0.966 0.038 78);
+  --clean: oklch(0.505 0.104 158);
+  --clean-bg: oklch(0.955 0.027 158);
+  --uncertain: oklch(0.487 0.144 293);
+  --uncertain-bg: oklch(0.936 0.027 293);
+
+  --radius: 0.625rem;
+}
+
+/* Both selectors, so the theme follows the system by default and can still be
+   pinned. `:not([data-theme='light'])` is what lets a light pin win over a
+   dark OS setting. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --background: oklch(0.145 0.008 265);
+    --foreground: oklch(0.928 0.008 265);
+    --card: oklch(0.196 0.009 265);
+    --card-foreground: oklch(0.928 0.008 265);
+    --muted: oklch(0.225 0.009 265);
+    --muted-foreground: oklch(0.638 0.014 265);
+    --border: oklch(0.286 0.012 265);
+    --input: oklch(0.286 0.012 265);
+    --ring: oklch(0.48 0.014 265);
+    --primary: oklch(0.928 0.008 265);
+    --primary-foreground: oklch(0.196 0.009 265);
+    --secondary: oklch(0.256 0.01 265);
+    --secondary-foreground: oklch(0.928 0.008 265);
+    --accent: oklch(0.256 0.01 265);
+    --accent-foreground: oklch(0.928 0.008 265);
+    --destructive: oklch(0.704 0.155 22);
+    --destructive-foreground: oklch(0.145 0.008 265);
+
+    --defect: oklch(0.733 0.129 25);
+    --defect-bg: oklch(0.268 0.055 25);
+    --review: oklch(0.799 0.117 75);
+    --review-bg: oklch(0.268 0.043 75);
+    --clean: oklch(0.793 0.134 157);
+    --clean-bg: oklch(0.268 0.055 157);
+    --uncertain: oklch(0.746 0.108 292);
+    --uncertain-bg: oklch(0.268 0.067 292);
+  }
+}
+
+:root[data-theme='dark'] {
+  --background: oklch(0.145 0.008 265);
+  --foreground: oklch(0.928 0.008 265);
+  --card: oklch(0.196 0.009 265);
+  --card-foreground: oklch(0.928 0.008 265);
+  --muted: oklch(0.225 0.009 265);
+  --muted-foreground: oklch(0.638 0.014 265);
+  --border: oklch(0.286 0.012 265);
+  --input: oklch(0.286 0.012 265);
+  --ring: oklch(0.48 0.014 265);
+  --primary: oklch(0.928 0.008 265);
+  --primary-foreground: oklch(0.196 0.009 265);
+  --secondary: oklch(0.256 0.01 265);
+  --secondary-foreground: oklch(0.928 0.008 265);
+  --accent: oklch(0.256 0.01 265);
+  --accent-foreground: oklch(0.928 0.008 265);
+  --destructive: oklch(0.704 0.155 22);
+  --destructive-foreground: oklch(0.145 0.008 265);
+
+  --defect: oklch(0.733 0.129 25);
+  --defect-bg: oklch(0.268 0.055 25);
+  --review: oklch(0.799 0.117 75);
+  --review-bg: oklch(0.268 0.043 75);
+  --clean: oklch(0.793 0.134 157);
+  --clean-bg: oklch(0.268 0.055 157);
+  --uncertain: oklch(0.746 0.108 292);
+  --uncertain-bg: oklch(0.268 0.067 292);
+}
+
+* { border-color: var(--border); }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}

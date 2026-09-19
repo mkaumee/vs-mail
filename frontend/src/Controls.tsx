@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react'
-import { api } from './api.js'
+import { api, type GmailStatus, type Job, type Stats } from '@/api'
+import { Button } from '@/components/ui/button'
 
 // Seeding and running take minutes, so they return a job and the bar polls
 // it. Nobody should need a terminal open during a demo.
-export default function Controls({ stats, onChanged, onError }) {
-  const [job, setJob] = useState(null)
-  const [gmail, setGmail] = useState(null)
+export default function Controls({
+  stats,
+  gmail,
+  onChanged,
+  onError,
+}: {
+  stats: Stats | undefined
+  gmail: GmailStatus | null
+  onChanged: () => void
+  onError: (message: string) => void
+}) {
+  const [job, setJob] = useState<Job | null>(null)
   const [watching, setWatching] = useState(false)
   const [source, setSource] = useState('bundle')
   const [provider, setProvider] = useState('mock')
 
   useEffect(() => {
-    api.gmailStatus().then(setGmail).catch(() => setGmail({ ready: false }))
     api.watchStatus().then((s) => setWatching(s.watching)).catch(() => {})
   }, [])
 
@@ -24,29 +33,18 @@ export default function Controls({ stats, onChanged, onError }) {
         setJob(next)
         if (next.state !== 'running') onChanged()
       } catch (error) {
-        onError(error.message)
+        onError((error as Error).message)
         setJob(null)
       }
     }, 900)
     return () => clearInterval(timer)
   }, [job, onChanged, onError])
 
-  const start = async (fn) => {
+  const start = async (fn: () => Promise<Job>) => {
     try {
       setJob(await fn())
     } catch (error) {
-      onError(error.message)
-    }
-  }
-
-  // Consent happens in the operator's own browser and comes back to this
-  // app, which is what a web OAuth client means. There is no terminal step.
-  const connectGmail = async () => {
-    try {
-      const { authorization_url } = await api.gmailAuthStart()
-      window.location.href = authorization_url
-    } catch (error) {
-      onError(error.message)
+      onError((error as Error).message)
     }
   }
 
@@ -60,58 +58,75 @@ export default function Controls({ stats, onChanged, onError }) {
         setWatching(true)
       }
     } catch (error) {
-      onError(error.message)
+      onError((error as Error).message)
     }
   }
 
   const busy = job?.state === 'running'
   const progress = busy && job.total ? ` ${job.done}/${job.total}` : ''
+  const select =
+    'h-9 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50'
 
   return (
-    <>
-      <select value={source} onChange={(e) => setSource(e.target.value)} disabled={busy}>
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        className={select}
+        value={source}
+        onChange={(e) => setSource(e.target.value)}
+        disabled={busy}
+      >
         <option value="bundle">Sample data</option>
         <option value="gmail" disabled={!gmail?.ready}>
           {gmail?.ready ? `Gmail — ${gmail.mailbox}` : 'Gmail — not connected'}
         </option>
       </select>
 
-      <select value={provider} onChange={(e) => setProvider(e.target.value)} disabled={busy}>
+      <select
+        className={select}
+        value={provider}
+        onChange={(e) => setProvider(e.target.value)}
+        disabled={busy}
+      >
         <option value="mock">Offline rules</option>
         <option value="deepseek">DeepSeek</option>
         <option value="remote">Deployed service</option>
       </select>
 
-      <button
-        className="primary"
+      <Button
+        loading={busy && job.kind === 'run'}
         disabled={busy}
-        onClick={() => start(() => api.startRun({ source, provider, labels: source === 'gmail' }))}
+        onClick={() =>
+          start(() => api.startRun({ source, provider, labels: source === 'gmail' }))
+        }
       >
         {busy && job.kind === 'run' ? `Processing${progress}` : 'Process inbox'}
-      </button>
-
-      {gmail && !gmail.ready && (
-        <button onClick={connectGmail}>Connect Gmail</button>
-      )}
+      </Button>
 
       {gmail?.ready && (
         <>
-          <button disabled={busy} onClick={() => start(() => api.seed())}>
+          <Button
+            variant="outline"
+            loading={busy && job.kind === 'seed'}
+            disabled={busy}
+            onClick={() => start(() => api.seed())}
+          >
             {busy && job.kind === 'seed' ? `Seeding${progress}` : 'Seed Gmail'}
-          </button>
-          <button disabled={busy} onClick={() => start(() => api.resetGmail())}>
+          </Button>
+          <Button variant="outline" disabled={busy} onClick={() => start(() => api.resetGmail())}>
             Clear Gmail
-          </button>
-          <button onClick={toggleWatch}>
+          </Button>
+          <Button variant={watching ? 'secondary' : 'outline'} onClick={toggleWatch}>
             {watching ? '● Watching — stop' : 'Watch for new mail'}
-          </button>
+          </Button>
         </>
       )}
 
-      {busy && <span className="tile"><small>{job.message}</small></span>}
+      {busy && <span className="text-xs text-muted-foreground">{job.message}</span>}
       {stats?.ran_at && !busy && (
-        <span className="tile"><small>{stats.source} · {stats.total} emails</small></span>
+        <span className="text-xs text-muted-foreground">
+          {stats.source} · {stats.total} emails
+        </span>
       )}
-    </>
+    </div>
   )
 }
