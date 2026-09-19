@@ -1,0 +1,25 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Generated output
+submission.json
+submission*.json
+!sample data/sample_submission.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# Node (frontend, later)
+node_modules/
+dist/
+
+# OS
+.DS_Store
