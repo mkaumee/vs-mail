@@ -12,7 +12,13 @@ The design and the reasoning behind it are in [PLAN.md](PLAN.md).
 
 ## Running it
 
+**Python 3.10 or newer is required** (3.11+ recommended). On macOS the default
+`python3` is often 3.9, which cannot parse the `X | None` annotations pydantic
+evaluates at import time — create the virtualenv with a newer interpreter:
+
 ```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+
 pip install -r requirements-dev.txt
 
 # Offline: no API key, no network. Produces a full baseline submission.
