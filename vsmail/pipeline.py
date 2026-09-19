@@ -41,6 +41,10 @@ class Processed:
     #: Why this case wants a human, beyond anything the submission records.
     #: Never changes the submission — it feeds the review queue.
     concerns: tuple[str, ...] = ()
+    #: Where the values came from. Recorded and displayed, but *not* a reason
+    #: to escalate: "a reviewer corrected this" is history, not doubt, and
+    #: treating it as doubt would reopen a corrected case forever.
+    provenance: tuple[str, ...] = ()
 
 
 def _load(bundle: Bundle, email: EmailRecord, role: str) -> Document | None:
@@ -66,6 +70,7 @@ async def process_email(
     category = classification.category
 
     concerns: list[str] = []
+    provenance: list[str] = []
     if classification.confidence < CONFIDENCE_THRESHOLD:
         # The model is unsure which category this is. Its best guess still
         # goes in the submission — every email needs one of the five and the
@@ -97,13 +102,13 @@ async def process_email(
     corrections = store.corrections_for(email.email_id) if store else {}
     if extraction is not None and corrections:
         extraction = apply_corrections(extraction, corrections)
-        concerns.append("includes values corrected by a reviewer")
+        provenance.append("includes values corrected by a reviewer")
 
     settled = store.settlement_for(email.email_id) if store else None
     if settled:
         # The one path that does not run the comparator. Recorded as such so
         # a forced outcome is never mistaken for a computed one.
-        concerns.append("outcome set by a reviewer, not compared")
+        provenance.append("outcome set by a reviewer, not compared")
         return Processed(
             verdict=Verdict(
                 email_id=email.email_id,
@@ -118,6 +123,7 @@ async def process_email(
             bl=bl,
             confidence=classification.confidence,
             concerns=tuple(concerns),
+            provenance=tuple(provenance),
         )
 
     if extraction is not None and extraction.uncertain_fields:
@@ -139,6 +145,7 @@ async def process_email(
                 bl=bl,
                 confidence=classification.confidence,
                 concerns=tuple(concerns),
+                provenance=tuple(provenance),
             )
 
     return Processed(
@@ -148,6 +155,7 @@ async def process_email(
         bl=bl,
         confidence=classification.confidence,
         concerns=tuple(concerns),
+        provenance=tuple(provenance),
     )
 
 

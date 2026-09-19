@@ -64,11 +64,16 @@ def cmd_show(store: ReviewStore, args) -> int:
         )
     evidence = case.evidence
     print(f"{case.email_id}  {case.state}  ({case.reason})")
+    outstanding = evidence.get("fields_at_issue") or []
+    if outstanding:
+        print(f"  still blocking: {', '.join(outstanding)}")
     print(f"  category   {evidence.get('category')}  status {evidence.get('status')}")
     print(f"  SI         {evidence.get('si')}  {evidence.get('si_path') or ''}")
     print(f"  BL         {evidence.get('bl')}  {evidence.get('bl_path') or ''}")
     for concern in evidence.get("concerns") or []:
         print(f"  ! {concern}")
+    for note in evidence.get("provenance") or []:
+        print(f"  · {note}")
     print()
     for name in FIELDS:
         value = (evidence.get("values") or {}).get(name)

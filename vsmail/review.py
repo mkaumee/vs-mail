@@ -47,6 +47,11 @@ REASON_SEVERITY: dict[str, int] = {
 
 OPEN = "open"
 RESOLVED = "resolved"
+#: The escalation was correct and a person has accepted it. Distinct from
+#: RESOLVED because a resolution is an attempt to fix the email, which can
+#: fall short, whereas an acknowledgement is a decision that there is nothing
+#: to fix. Only the first is ever reopened.
+ACKNOWLEDGED = "acknowledged"
 AUTO_CLOSED = "auto_closed"
 
 
@@ -137,6 +142,7 @@ def evidence_from(processed) -> dict:
         "status": processed.verdict.status,
         "confidence": processed.confidence,
         "concerns": list(processed.concerns),
+        "provenance": list(processed.provenance),
         "values": values,
         "fields_at_issue": at_issue,
     }
@@ -202,12 +208,19 @@ class ReviewStore:
     def sync(self, processed_list) -> dict[str, int]:
         """Open cases for anything a run could not settle on its own.
 
-        A case a person already resolved is left alone — the resolution is
-        usually *why* the email no longer needs review, and reopening it would
-        undo the work. One that is open but no longer flagged is closed with
-        that noted, so the queue does not accumulate stale entries.
+        A resolution can fall short. `email_518` has two blank fields, so
+        supplying one of them leaves the email escalating for the other — and
+        if the case stayed closed, an email nobody had finished with would
+        disappear from the queue. So a resolved case that is *still* flagged
+        is reopened, keeping its corrections and its audit trail, with the
+        reopening recorded.
+
+        An acknowledged case is different: a person decided the escalation was
+        right and there is nothing to fix, so it stays closed. One that is
+        open but no longer flagged is closed with that noted, so the queue
+        does not accumulate stale entries.
         """
-        counts = {"opened": 0, "already_open": 0, "auto_closed": 0}
+        counts = {"opened": 0, "already_open": 0, "reopened": 0, "auto_closed": 0}
         flagged: set[str] = set()
 
         for processed in processed_list:
@@ -229,6 +242,19 @@ class ReviewStore:
                 existing.evidence = evidence_from(processed)
                 existing.reason = reason
                 counts["already_open"] += 1
+            elif existing.state == ACKNOWLEDGED:
+                # A person has accepted this escalation. Leave it closed.
+                existing.evidence = evidence_from(processed)
+            else:
+                existing.state = OPEN
+                existing.reason = reason
+                existing.evidence = evidence_from(processed)
+                existing.record(
+                    "reopened",
+                    "system",
+                    f"still needs review after corrections: {reason}",
+                )
+                counts["reopened"] += 1
 
         for case in self.cases.values():
             if case.state == OPEN and case.email_id not in flagged:
@@ -276,6 +302,10 @@ class ReviewStore:
         if note:
             case.record("note", by, note)
 
-        case.state = RESOLVED
+        # Confirming on its own says there is nothing to fix, so the case stays
+        # closed. Anything that changes an input is an attempt at a fix, which
+        # may not be enough — the next run decides whether it was.
+        changed_an_input = bool(si or bl or settle)
+        case.state = RESOLVED if changed_an_input else ACKNOWLEDGED
         self.save()
         return case

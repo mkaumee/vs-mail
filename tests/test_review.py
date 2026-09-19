@@ -7,6 +7,7 @@ from vsmail import pipeline
 from vsmail.llm.mock import MockProvider
 from vsmail.models import Extraction
 from vsmail.review import (
+    ACKNOWLEDGED,
     AUTO_CLOSED,
     OPEN,
     RESOLVED,
@@ -110,7 +111,10 @@ async def test_a_supplied_value_reaches_its_verdict_through_the_comparator(
     after = (await pipeline.process_all(bundle, MockProvider(), emails=emails, store=store))[0]
     assert after.verdict.status == "OK"
     assert after.verdict.review_reason is None
-    assert any("corrected by a reviewer" in c for c in after.concerns)
+    # Provenance, not a concern: "a reviewer corrected this" is history, and
+    # treating it as doubt would reopen the case on every future run.
+    assert any("corrected by a reviewer" in n for n in after.provenance)
+    assert not after.concerns
 
 
 async def test_a_wrong_supplied_value_produces_a_mismatch(bundle, store, processed):
@@ -131,14 +135,16 @@ async def test_a_forced_outcome_is_marked_as_not_compared(bundle, store, process
     emails = [e for e in bundle.emails() if e.email_id == "email_511"]
     after = (await pipeline.process_all(bundle, MockProvider(), emails=emails, store=store))[0]
     assert after.verdict.status == "OK"
-    assert any("not compared" in c for c in after.concerns)
+    assert any("not compared" in n for n in after.provenance)
 
 
-def test_a_resolved_case_is_not_reopened(store, processed):
+def test_an_acknowledged_case_is_not_reopened(store, processed):
+    """Confirming says there is nothing to fix, so it stays closed."""
     store.sync(processed)
     store.resolve("email_516", by="me", confirm=True)
+    assert store.get("email_516").state == ACKNOWLEDGED
     store.sync(processed)
-    assert store.get("email_516").state == RESOLVED
+    assert store.get("email_516").state == ACKNOWLEDGED
 
 
 def test_a_case_no_longer_flagged_is_closed(store, processed):
@@ -146,3 +152,44 @@ def test_a_case_no_longer_flagged_is_closed(store, processed):
     assert store.get("email_516").state == OPEN
     store.sync([p for p in processed if p.verdict.email_id != "email_516"])
     assert store.get("email_516").state == AUTO_CLOSED
+
+
+async def test_a_fix_that_falls_short_puts_the_case_back(bundle, store, processed):
+    """email_518 has two blank fields. Supplying one leaves it escalating, and
+    a case nobody has finished with must not vanish from the queue."""
+    store.sync(processed)
+    store.resolve("email_518", by="ops", si={"gross_weight_kg": "1 KG"})
+    assert store.get("email_518").state == RESOLVED
+
+    emails = [e for e in bundle.emails() if e.email_id == "email_518"]
+    after = await pipeline.process_all(bundle, MockProvider(), emails=emails, store=store)
+    counts = store.sync(after)
+
+    assert counts["reopened"] == 1
+    case = store.get("email_518")
+    assert case.state == OPEN
+    assert case.evidence["fields_at_issue"] == ["port_of_discharge"]
+    assert case.corrections["si"]["gross_weight_kg"] == "1 KG", "the fix is kept"
+    assert any(e["action"] == "reopened" for e in case.audit)
+
+
+async def test_a_complete_fix_closes_the_case_and_it_stays_closed(
+    bundle, store, processed
+):
+    """The second bug: a corrected email carried a concern forever, so the
+    case reopened on every run no matter how completely it was fixed."""
+    store.sync(processed)
+    store.resolve(
+        "email_518",
+        by="ops",
+        si={"gross_weight_kg": "233,058 KG", "port_of_discharge": "APAPA, NIGERIA"},
+    )
+    emails = [e for e in bundle.emails() if e.email_id == "email_518"]
+
+    for _ in range(2):
+        after = await pipeline.process_all(
+            bundle, MockProvider(), emails=emails, store=store
+        )
+        store.sync(after)
+        assert store.get("email_518").state == RESOLVED
+        assert after[0].verdict.status != "NEEDS_REVIEW"

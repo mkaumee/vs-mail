@@ -60,6 +60,8 @@ def explain(processed) -> None:
         print(f"  BL: {_source(item.bl)}")
         for concern in item.concerns:
             print(f"  ! {concern}")
+        for note in item.provenance:
+            print(f"  · {note}")
         if item.extraction is None:
             print("  (no extraction — decided before reading the documents)")
             continue
@@ -140,10 +142,11 @@ async def main() -> int:
     verdicts = [item.verdict for item in processed]
     if store is not None:
         counts = store.sync(processed)
-        print(
-            f"  review queue: {counts['opened']} opened, "
-            f"{counts['already_open']} still open, {counts['auto_closed']} closed"
-        )
+        parts = [f"{counts['opened']} opened", f"{counts['already_open']} still open"]
+        if counts.get("reopened"):
+            parts.append(f"{counts['reopened']} REOPENED (a fix fell short)")
+        parts.append(f"{counts['auto_closed']} closed")
+        print(f"  review queue: {', '.join(parts)}")
     if args.explain:
         explain(processed)
 

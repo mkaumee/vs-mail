@@ -191,4 +191,4 @@ def test_retry_reprocesses_one_email_with_the_correction_applied(review_client, 
     )
     body = review_client.post("/review/email_516/retry", headers=auth).json()
     assert body["verdict"]["status"] == "OK"
-    assert any("corrected by a reviewer" in c for c in body["concerns"])
+    assert any("corrected by a reviewer" in n for n in body["provenance"])

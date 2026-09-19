@@ -277,4 +277,5 @@ async def review_retry(email_id: str) -> dict:
         "email_id": email_id,
         "verdict": processed.verdict.to_submission_entry(),
         "concerns": list(processed.concerns),
+        "provenance": list(processed.provenance),
     }
