@@ -373,6 +373,43 @@ the organizers' scorer and must never be mistaken for it. See §2.
 
 ---
 
+## 5c. Human In The Loop — the half that is missing
+
+The system decides *when* to stop: `decide()` escalates with one of four
+reasons and the evidence behind it, and the last run escalated 20 emails
+rather than guessing. That is enough for the submission file, which only
+records the reason.
+
+It is **not** enough for the brief's reliability requirement, which asks that a
+person "confirm or correct it, then update the report", with failures visible
+and retries allowed. None of that exists yet, and it was never written down
+here either — ⑤ below assumes a human correction without specifying the loop
+that produces one.
+
+### What it needs
+
+| Piece | Why |
+|---|---|
+| A review queue | The 20 escalations, plus anything the provider returned with low confidence, ordered by severity rather than arrival |
+| A case view | The email, the reason, both documents (text, or the rendered page for a scan), and every field read with its source snippet |
+| Resolve actions | Confirm the escalation · supply a missing value · correct a misread one · settle it as OK or MISMATCH |
+| Re-run on resolve | Feed the human's values back through the same comparator so the verdict is recomputed, never hand-edited |
+| An audit record | Who decided, when, and what changed — this is a compliance domain |
+| Retry | A processing failure must be re-runnable without redoing the other 519 |
+
+### The architectural consequence
+
+**The pipeline is stateless today** — every run recomputes everything from
+scratch. A human decision has to survive the next run, so this needs a store
+(a JSON file is enough at this size), not just screens. That store is also
+what feeds ⑤: an alias a reviewer corrects once should be right next time.
+
+Worth building because it is the capability most teams will skip. Emitting
+`NEEDS_REVIEW` is easy; letting a person resolve one and watching the report
+update is the part that looks like a product.
+
+---
+
 ## 6. Feature Backlog — Ranked by Impact per Hour
 
 ### ① Write the draft into Gmail, not just our app — *~2h, huge*
