@@ -95,6 +95,7 @@ def test_gmail_status_answers_even_when_unconfigured(client, auth, monkeypatch, 
     """The page asks on load; it must not blow up before setup is done."""
     from vsmail.gmail import client as gmail_client
 
+    monkeypatch.delenv(gmail_client.TOKEN_ENV, raising=False)
     monkeypatch.setattr(gmail_client, "CREDENTIALS", tmp_path / "nope.json")
     monkeypatch.setattr(gmail_client, "TOKEN", tmp_path / "nope-token.json")
     body = client.get("/gmail/status", headers=auth).json()
