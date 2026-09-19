@@ -40,7 +40,12 @@ def _pairs(values: list[str]) -> tuple[dict, dict]:
 def cmd_list(store: ReviewStore, args) -> int:
     queue = store.queue()
     if not queue:
-        print("queue is empty")
+        if not store.path.is_file():
+            print(f"no review store at {store.path} — nothing has been processed yet.")
+            print("Run the pipeline first:")
+            print("  python scripts/run_submission.py --provider mock")
+        else:
+            print("queue is empty — nothing is waiting on a person")
         return 0
     print(f"{len(queue)} case(s) waiting, worst first\n")
     for case in queue:
@@ -53,7 +58,10 @@ def cmd_list(store: ReviewStore, args) -> int:
 def cmd_show(store: ReviewStore, args) -> int:
     case = store.get(args.email_id)
     if case is None:
-        raise SystemExit(f"no case for {args.email_id}")
+        raise SystemExit(
+            f"no case for {args.email_id}. Run `python scripts/review.py list` to "
+            "see what is waiting."
+        )
     evidence = case.evidence
     print(f"{case.email_id}  {case.state}  ({case.reason})")
     print(f"  category   {evidence.get('category')}  status {evidence.get('status')}")
@@ -97,15 +105,23 @@ def cmd_resolve(store: ReviewStore, args) -> int:
     if not (si or bl or settle or args.confirm or args.note):
         raise SystemExit("nothing to record: pass --supply, --confirm, --settle-status or --note")
 
-    case = store.resolve(
-        args.email_id,
-        by=args.by,
-        confirm=args.confirm,
-        si=si,
-        bl=bl,
-        settle=settle,
-        note=args.note or "",
-    )
+    try:
+        case = store.resolve(
+            args.email_id,
+            by=args.by,
+            confirm=args.confirm,
+            si=si,
+            bl=bl,
+            settle=settle,
+            note=args.note or "",
+        )
+    except KeyError:
+        raise SystemExit(
+            f"no case for {args.email_id}. Run `python scripts/review.py list` to "
+            "see what is waiting, or run the pipeline first to open cases."
+        )
+    except ValueError as exc:
+        raise SystemExit(str(exc))
     print(f"{case.email_id} resolved by {args.by}")
     for entry in case.audit[-4:]:
         print(f"  {entry['action']:<10} {entry['detail']}")
