@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.app_routes import app_router, oauth_router
+from api.auth_routes import auth_router
 from api.routes import guarded, router
 
 app = FastAPI(
@@ -36,6 +37,9 @@ app.include_router(app_router)
 # Unguarded, because Google redirects a browser to it. Registered here with
 # the rest so it is ahead of the catch-all that serves the page.
 app.include_router(oauth_router)
+# Signing in. Unguarded for the same reason, and separate from Gmail because
+# being signed in and having a mailbox attached are different things.
+app.include_router(auth_router)
 
 #: The built frontend, served by this same app so there is one URL, one
 #: deploy and no CORS. Mounted last so it cannot shadow an API route.
