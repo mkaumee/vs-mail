@@ -3,6 +3,7 @@ import { api, type ReplyResponse } from '@/api'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import ReplyComposer from '@/components/ReplyComposer'
+import { useDrafts } from '@/useDrafts'
 
 /**
  * The reply in list view.
@@ -23,6 +24,7 @@ export default function ReplyCard({
   version: string
   onError: (message: string) => void
 }) {
+  const drafts = useDrafts()
   const [reply, setReply] = useState<ReplyResponse | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
 
@@ -66,7 +68,10 @@ export default function ReplyCard({
     <ReplyComposer
       emailId={emailId}
       draft={reply.draft}
-      version={version}
+      value={drafts.valueFor(emailId, reply.draft, version)}
+      edited={drafts.isEdited(emailId, reply.draft, version)}
+      onChange={(next) => drafts.change(emailId, version, next)}
+      onReset={() => drafts.reset(emailId)}
       onError={onError}
     />
   )

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Check, Copy, FlaskConical, Mail, Send, Undo2 } from 'lucide-react'
 import { api, type Draft, type Sent } from '@/api'
+import type { Edit } from '@/useDrafts'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -40,21 +41,25 @@ export default function ReplyComposer({
   emailId,
   draft,
   /**
-   * Anything about the verdict that would change the reply. When it changes,
-   * an edit written against the old verdict is discarded: a hand-edited email
-   * contradicting the current finding is worse than no draft at all.
+   * The values on screen. Owned by the caller, not here: moving to the next
+   * email and back remounts this component, and a reviewer who rewrote three
+   * sentences would find them gone.
    */
-  version,
+  value,
+  edited,
+  onChange,
+  onReset,
   onError,
 }: {
   emailId: string
   draft: Draft
-  version: string
+  value: Edit
+  edited: boolean
+  onChange: (next: Edit) => void
+  onReset: () => void
   onError: (message: string) => void
 }) {
-  const [to, setTo] = useState(draft.to)
-  const [subject, setSubject] = useState(draft.subject)
-  const [body, setBody] = useState(draft.body)
+  const { to, subject, body } = value
   const [testTo, setTestTo] = useState(getTestRecipient)
 
   const [copied, setCopied] = useState(false)
@@ -63,25 +68,16 @@ export default function ReplyComposer({
   const [saved, setSaved] = useState<string | null>(null)
   const [sent, setSent] = useState<Sent | null>(null)
 
-  // A new email, or a verdict that moved underneath this one. Either way the
-  // edit no longer belongs to what is on screen.
+  // What happened to the *last* email must not be reported about this one.
   useEffect(() => {
-    setTo(draft.to)
-    setSubject(draft.subject)
-    setBody(draft.body)
     setCopied(false)
     setSaved(null)
     setSent(null)
-  }, [emailId, version, draft.to, draft.subject, draft.body])
+  }, [emailId])
 
-  const edited =
-    to !== draft.to || subject !== draft.subject || body !== draft.body
-
-  const reset = () => {
-    setTo(draft.to)
-    setSubject(draft.subject)
-    setBody(draft.body)
-  }
+  const setTo = (v: string) => onChange({ ...value, to: v })
+  const setSubject = (v: string) => onChange({ ...value, subject: v })
+  const setBody = (v: string) => onChange({ ...value, body: v })
 
   const copy = async () => {
     try {
@@ -252,7 +248,7 @@ export default function ReplyComposer({
             Create Gmail draft
           </Button>
           {edited && (
-            <Button size="sm" variant="ghost" onClick={reset}>
+            <Button size="sm" variant="ghost" onClick={onReset}>
               <Undo2 />
               Reset to drafted
             </Button>

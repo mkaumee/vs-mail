@@ -10,6 +10,7 @@ import Fields from '@/components/Fields'
 import IncomingEmail from '@/components/IncomingEmail'
 import ReplyComposer from '@/components/ReplyComposer'
 import { useDeck } from './useDeck'
+import { useDrafts } from './useDrafts'
 import { REVIEW_REASONS, TONE_CLASS, statusTone } from './format'
 
 const fetchReply = (id: string) => api.reply(id)
@@ -36,6 +37,8 @@ export default function Deck({ lane, rows }: { lane: string; rows: Result[] }) {
     fetchEmail,
   )
   const [error, setError] = useState<string | null>(null)
+  // Above the composer, so an edit survives moving away and back.
+  const drafts = useDrafts()
 
   const onKey = useCallback(
     (e: KeyboardEvent) => {
@@ -160,7 +163,10 @@ export default function Deck({ lane, rows }: { lane: string; rows: Result[] }) {
           <ReplyComposer
             emailId={current}
             draft={entry.value.draft}
-            version={versionOf(row)}
+            value={drafts.valueFor(current, entry.value.draft, versionOf(row))}
+            edited={drafts.isEdited(current, entry.value.draft, versionOf(row))}
+            onChange={(next) => drafts.change(current, versionOf(row), next)}
+            onReset={() => drafts.reset(current)}
             onError={setError}
           />
         )}

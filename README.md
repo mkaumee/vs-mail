@@ -308,8 +308,39 @@ equivalence. Those are not offered for approval, because a confirmation that
 suppresses the doubt would sound more certain to the customer than the run was
 to itself.
 
-**Nothing is sent.** Copy it, or press *Create Gmail draft* to put it in the
-original thread unsent. The send is always a person's.
+**The words in the box are what goes out.** The draft is a starting point,
+not a script — change anything, and *Reset to drafted* puts it back. An edit
+is discarded if the verdict moves underneath it, because a hand-edited email
+still asking a customer to amend a field that now agrees is worse than no
+draft at all, and it is one click from being sent.
+
+**The send never decides where it goes.** *Send* goes out through the Gmail
+API, but only to the address in *Send test emails to*; the real recipient is
+named in a banner at the top of the message and in an `X-VS-Would-Have-Gone-To`
+header, so a diverted reply is still traceable. With no test address the
+service refuses — a 422, not a silent send.
+
+That refusal lives in `vsmail/gmail/send.py`, not in the page, because a page
+can be a stale tab. `VS_TEST_RECIPIENT` pins a deployment safe when the page
+sends nothing. Reaching a real address takes an explicit `allow_real` on the
+request, and the bundle's senders — `docs@vitalsolutions.sg`,
+`nirmala@fujitogrp.com` — look very much like real freight desks.
+
+*Copy* and *Create Gmail draft* are still there, and the Gmail draft goes into
+the original thread unsent.
+
+## What the reply is checked against
+
+A reply asserting a discrepancy is worth nothing if you cannot see the
+discrepancy. Above every draft sits the email it answers — trimmed to the
+request, with the full text a click away and the attachment names beside what
+was actually read out of each — and then the seven-field table.
+
+This matters more than it sounds. `email_004` reads as *agreeing* until you
+look across the pair rather than down the column: both SI values say
+`EAST BRIGHT FZ-LLC`, both BL values say `UAB NOVAKOPA`, and the address block
+under both names is identical. Only the party changed. A checker shown just
+the drafted reply has no way to tell a real defect from a false alarm.
 
 ## Human review
 
