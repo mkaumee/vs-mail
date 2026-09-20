@@ -1,0 +1,206 @@
+/* Design tokens, ported from the VS-Mail design prototype.
+ *
+ * Two layers, and the split matters. The first is the prototype's own
+ * vocabulary — canvas, card, accent, the glass levels — written as it wrote
+ * them, so a value can be checked against the design without translation.
+ * The second, in index.css, points our existing shadcn token names at these.
+ * That is what makes the port cheap: every Button, Card, Table and Badge
+ * already written takes the new palette without being touched.
+ */
+
+:root {
+  --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* type scale: H1 / H2 / H3 / body / secondary / caption / metadata */
+  --fs-h1: clamp(1.5rem, 1.1rem + 1.3vw, 2.0625rem);
+  --fs-h2: 1.1875rem;
+  --fs-h3: 0.9375rem;
+  --fs-body: 0.875rem;
+  --fs-sm: 0.8125rem;
+  --fs-cap: 0.75rem;
+  --fs-meta: 0.6875rem;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 20px;
+
+  --motion-fast: 160ms;
+  --motion-normal: 260ms;
+  --motion-slow: 400ms;
+  --motion-theme: 320ms;
+  --ease-standard: cubic-bezier(.2, .8, .2, 1);
+
+  --sidebar-w: 276px;
+  --topbar-h: 64px;
+
+  --z-topbar: 30;
+  --z-menu: 60;
+  --z-drawer: 70;
+  --z-modal: 80;
+  --z-toast: 90;
+}
+
+/* -- light ------------------------------------------------------------- */
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+  --canvas: #FAF6F0;
+  --surface: #F4EEE4;
+  --paper-card: #FFFCF7;
+  --card-hover: #FFFFFF;
+  --inset: #F3ECE1;
+  --ink: #2A211B;
+  --ink-2: #736254;
+  --ink-3: #7A6A5C;
+
+  --gold: #B98245;
+  --gold-light: #D6A66D;
+  --gold-soft: rgba(185, 130, 69, 0.13);
+  --gold-border: rgba(185, 130, 69, 0.42);
+
+  --line: rgba(180, 155, 130, 0.22);
+  --line-strong: rgba(180, 155, 130, 0.38);
+
+  --btn-bg: #2A211B;
+  --btn-bg-hover: #3A2E26;
+  --btn-fg: #FFFCF7;
+
+  --ok: #4F7655;
+  --bad: #A6534B;
+  --warn: #B98245;
+  --note: #63747A;
+  --ok-fg: #3D5F44;
+  --bad-fg: #8D3E37;
+  --warn-fg: #80572F;
+  --note-fg: #4B5D63;
+  --ok-bg: color-mix(in srgb, var(--ok) 12%, transparent);
+  --bad-bg: color-mix(in srgb, var(--bad) 11%, transparent);
+  --warn-bg: color-mix(in srgb, var(--warn) 15%, transparent);
+  --note-bg: color-mix(in srgb, var(--note) 12%, transparent);
+
+  --glass-border: rgba(180, 155, 130, 0.22);
+  --glass-hl: rgba(255, 255, 255, 0.72);
+  --g2-bg: rgba(255, 252, 247, 0.62);  --g2-blur: 24px;
+  --g3-bg: rgba(255, 252, 247, 0.80);  --g3-blur: 12px;
+  --g4-bg: rgba(255, 252, 247, 0.58);  --g4-blur: 14px;
+  --g5-bg: rgba(255, 252, 247, 0.86);  --g5-blur: 28px;
+  --glow: rgba(214, 166, 109, 0.22);
+
+  --shadow-1: 0 8px 30px rgba(74, 52, 36, 0.06);
+  --shadow-2: 0 14px 44px rgba(74, 52, 36, 0.12);
+  --shadow-float: 0 20px 60px rgba(74, 52, 36, 0.18);
+
+  --skel-a: rgba(180, 155, 130, 0.14);
+  --skel-b: rgba(180, 155, 130, 0.30);
+
+  --amb-a: rgba(214, 166, 109, 0.38);
+  --amb-b: rgba(244, 226, 196, 0.85);
+  --amb-c: rgba(185, 130, 69, 0.20);
+  --focus-ring: #9A6A35;
+}
+
+/* -- dark -------------------------------------------------------------- */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: #181310;
+  --surface: #211A16;
+  --paper-card: #261F1A;
+  --card-hover: #2D241E;
+  --inset: #1F1814;
+  --ink: #F4EDE4;
+  --ink-2: #B9AA9B;
+  --ink-3: #A89987;
+
+  --gold: #D6A66D;
+  --gold-light: #E5BE8C;
+  --gold-soft: rgba(214, 166, 109, 0.13);
+  --gold-border: rgba(214, 166, 109, 0.42);
+
+  --line: rgba(214, 183, 150, 0.14);
+  --line-strong: rgba(214, 183, 150, 0.24);
+
+  --btn-bg: #D6A66D;
+  --btn-bg-hover: #E2B77F;
+  --btn-fg: #1E1611;
+
+  --ok-fg: #93C29B;
+  --bad-fg: #E39F97;
+  --warn-fg: #E2B57B;
+  --note-fg: #A9BDC3;
+  --ok-bg: color-mix(in srgb, var(--ok) 22%, transparent);
+  --bad-bg: color-mix(in srgb, var(--bad) 22%, transparent);
+  --warn-bg: color-mix(in srgb, var(--warn) 20%, transparent);
+  --note-bg: color-mix(in srgb, var(--note) 22%, transparent);
+
+  --glass-border: rgba(214, 183, 150, 0.14);
+  --glass-hl: rgba(255, 240, 220, 0.06);
+  --g2-bg: rgba(38, 31, 26, 0.68);  --g2-blur: 26px;
+  --g3-bg: rgba(38, 31, 26, 0.84);  --g3-blur: 12px;
+  --g4-bg: rgba(45, 36, 30, 0.62);  --g4-blur: 14px;
+  --g5-bg: rgba(38, 31, 26, 0.90);  --g5-blur: 28px;
+  --glow: rgba(214, 166, 109, 0.13);
+
+  --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.25);
+  --shadow-2: 0 14px 44px rgba(0, 0, 0, 0.36);
+  --shadow-float: 0 22px 64px rgba(0, 0, 0, 0.5);
+
+  --skel-a: rgba(214, 183, 150, 0.06);
+  --skel-b: rgba(214, 183, 150, 0.13);
+
+  --amb-a: rgba(128, 87, 47, 0.34);
+  --amb-b: rgba(90, 58, 36, 0.40);
+  --amb-c: rgba(214, 166, 109, 0.12);
+  --focus-ring: #E5BE8C;
+}
+
+/* Follow the machine until someone picks a side. `data-theme` on <html> is
+   what ThemeSwitcher writes, and it wins because it is more specific. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --canvas: #181310;
+    --surface: #211A16;
+    --paper-card: #261F1A;
+    --card-hover: #2D241E;
+    --inset: #1F1814;
+    --ink: #F4EDE4;
+    --ink-2: #B9AA9B;
+    --ink-3: #A89987;
+    --gold: #D6A66D;
+    --gold-light: #E5BE8C;
+    --gold-soft: rgba(214, 166, 109, 0.13);
+    --gold-border: rgba(214, 166, 109, 0.42);
+    --line: rgba(214, 183, 150, 0.14);
+    --line-strong: rgba(214, 183, 150, 0.24);
+    --btn-bg: #D6A66D;
+    --btn-bg-hover: #E2B77F;
+    --btn-fg: #1E1611;
+    --ok-fg: #93C29B;
+    --bad-fg: #E39F97;
+    --warn-fg: #E2B57B;
+    --note-fg: #A9BDC3;
+    --ok-bg: color-mix(in srgb, var(--ok) 22%, transparent);
+    --bad-bg: color-mix(in srgb, var(--bad) 22%, transparent);
+    --warn-bg: color-mix(in srgb, var(--warn) 20%, transparent);
+    --note-bg: color-mix(in srgb, var(--note) 22%, transparent);
+    --glass-border: rgba(214, 183, 150, 0.14);
+    --glass-hl: rgba(255, 240, 220, 0.06);
+    --g2-bg: rgba(38, 31, 26, 0.68);
+    --g3-bg: rgba(38, 31, 26, 0.84);
+    --g4-bg: rgba(45, 36, 30, 0.62);
+    --g5-bg: rgba(38, 31, 26, 0.90);
+    --glow: rgba(214, 166, 109, 0.13);
+    --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.25);
+    --shadow-2: 0 14px 44px rgba(0, 0, 0, 0.36);
+    --shadow-float: 0 22px 64px rgba(0, 0, 0, 0.5);
+    --skel-a: rgba(214, 183, 150, 0.06);
+    --skel-b: rgba(214, 183, 150, 0.13);
+    --amb-a: rgba(128, 87, 47, 0.34);
+    --amb-b: rgba(90, 58, 36, 0.40);
+    --amb-c: rgba(214, 166, 109, 0.12);
+    --focus-ring: #E5BE8C;
+  }
+}

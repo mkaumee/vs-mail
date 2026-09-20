@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { motion } from 'motion/react'
+import { Mail } from 'lucide-react'
 import { api, setToken } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,10 +37,25 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <div className="grid h-full place-items-center p-6">
-      <Card className="w-full max-w-md">
+    <div className="relative grid h-full place-items-center p-6">
+      <div className="ambient" aria-hidden>
+        <i /><i /><i />
+      </div>
+      <motion.div
+        className="w-full max-w-md"
+        initial={{ opacity: 0, y: 10, scale: 0.985 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.34, ease: [0.2, 0.8, 0.2, 1] }}
+      >
+      <Card className="glass-5 w-full border-0 bg-transparent shadow-none">
         <CardHeader>
-          <CardTitle>VS-Mail</CardTitle>
+          <span className="brand mb-1">
+            <span className="brand__mark">
+              <Mail className="size-[18px]" />
+            </span>
+            <span className="brand__word">VS-MAIL</span>
+          </span>
+          <CardTitle className="sr-only">VS-Mail</CardTitle>
           <p className="text-sm text-muted-foreground">
             Shipping document checks
           </p>
@@ -89,6 +106,7 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
           )}
         </CardContent>
       </Card>
+      </motion.div>
     </div>
   )
 }

@@ -1,154 +1,101 @@
 @import "tailwindcss";
 
-/* The token names and the OKLCH scale come from Greenlit's design system, so
-   the shadcn components below work unmodified. Two departures, both
-   deliberate:
+@import "./styles/tokens.css";
+@import "./styles/surfaces.css";
+@import "./styles/motion.css";
+@import "./styles/shell.css";
 
-   1. A dark theme actually exists here. Greenlit's components carry `dark:`
-      utilities but nothing ever defines the tokens they would read, so its
-      dark mode is inert. Ours was working before this port and dropping it
-      would be a regression, so the palette is carried across into the same
-      token names.
-
-   2. Four status roles are added — defect, review, clean, uncertain. They are
-      the product: a field that differs, a case waiting on a person, a check
-      that passed, a reading the model was unsure of. Expressing those through
-      `destructive` and `secondary` would flatten four meanings into two. */
-
+/* The bridge.
+ *
+ * Every Button, Card, Table and Badge in this app is written against the
+ * shadcn token names. Pointing those names at the prototype's palette
+ * repaints the whole app without touching a component — which is the only
+ * reason a design change this large is a day's work rather than a week's.
+ *
+ * The four status roles stay, because they are the product: a field that
+ * differs, a case waiting on a person, a check that passed, a reading the
+ * model was unsure of. The prototype's danger/warning/success/info map onto
+ * them one for one.
+ */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
+  --color-background: var(--canvas);
+  --color-foreground: var(--ink);
+  --color-card: var(--paper-card);
+  --color-card-foreground: var(--ink);
+  --color-muted: var(--surface);
+  --color-muted-foreground: var(--ink-2);
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--focus-ring);
+  --color-primary: var(--btn-bg);
+  --color-primary-foreground: var(--btn-fg);
+  --color-secondary: var(--surface);
+  --color-secondary-foreground: var(--ink);
+  --color-accent: var(--gold-soft);
+  --color-accent-foreground: var(--ink);
+  --color-destructive: var(--bad);
+  --color-destructive-foreground: var(--btn-fg);
 
-  --color-defect: var(--defect);
-  --color-defect-bg: var(--defect-bg);
-  --color-review: var(--review);
-  --color-review-bg: var(--review-bg);
-  --color-clean: var(--clean);
-  --color-clean-bg: var(--clean-bg);
-  --color-uncertain: var(--uncertain);
-  --color-uncertain-bg: var(--uncertain-bg);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
+  --color-surface: var(--surface);
+  --color-inset: var(--inset);
+  --color-ink-3: var(--ink-3);
 
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
+  --color-defect: var(--bad-fg);
+  --color-defect-bg: var(--bad-bg);
+  --color-review: var(--warn-fg);
+  --color-review-bg: var(--warn-bg);
+  --color-clean: var(--ok-fg);
+  --color-clean-bg: var(--ok-bg);
+  --color-uncertain: var(--note-fg);
+  --color-uncertain-bg: var(--note-bg);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  --radius-sm: var(--r-sm);
+  --radius-md: var(--r-md);
+  --radius-lg: var(--r-lg);
+  --radius-xl: var(--r-xl);
+
+  --shadow-soft: var(--shadow-1);
+  --shadow-raised: var(--shadow-2);
+  --shadow-float: var(--shadow-float);
 }
 
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-
-  --defect: oklch(0.505 0.168 25.5);
-  --defect-bg: oklch(0.955 0.021 25.5);
-  --review: oklch(0.545 0.122 68);
-  --review-bg: oklch(0.966 0.038 78);
-  --clean: oklch(0.505 0.104 158);
-  --clean-bg: oklch(0.955 0.027 158);
-  --uncertain: oklch(0.487 0.144 293);
-  --uncertain-bg: oklch(0.936 0.027 293);
-
-  --radius: 0.625rem;
-}
-
-/* Both selectors, so the theme follows the system by default and can still be
-   pinned. `:not([data-theme='light'])` is what lets a light pin win over a
-   dark OS setting. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    --background: oklch(0.145 0.008 265);
-    --foreground: oklch(0.928 0.008 265);
-    --card: oklch(0.196 0.009 265);
-    --card-foreground: oklch(0.928 0.008 265);
-    --muted: oklch(0.225 0.009 265);
-    --muted-foreground: oklch(0.638 0.014 265);
-    --border: oklch(0.286 0.012 265);
-    --input: oklch(0.286 0.012 265);
-    --ring: oklch(0.48 0.014 265);
-    --primary: oklch(0.928 0.008 265);
-    --primary-foreground: oklch(0.196 0.009 265);
-    --secondary: oklch(0.256 0.01 265);
-    --secondary-foreground: oklch(0.928 0.008 265);
-    --accent: oklch(0.256 0.01 265);
-    --accent-foreground: oklch(0.928 0.008 265);
-    --destructive: oklch(0.704 0.155 22);
-    --destructive-foreground: oklch(0.145 0.008 265);
-
-    --defect: oklch(0.733 0.129 25);
-    --defect-bg: oklch(0.268 0.055 25);
-    --review: oklch(0.799 0.117 75);
-    --review-bg: oklch(0.268 0.043 75);
-    --clean: oklch(0.793 0.134 157);
-    --clean-bg: oklch(0.268 0.055 157);
-    --uncertain: oklch(0.746 0.108 292);
-    --uncertain-bg: oklch(0.268 0.067 292);
-  }
-}
-
-:root[data-theme='dark'] {
-  --background: oklch(0.145 0.008 265);
-  --foreground: oklch(0.928 0.008 265);
-  --card: oklch(0.196 0.009 265);
-  --card-foreground: oklch(0.928 0.008 265);
-  --muted: oklch(0.225 0.009 265);
-  --muted-foreground: oklch(0.638 0.014 265);
-  --border: oklch(0.286 0.012 265);
-  --input: oklch(0.286 0.012 265);
-  --ring: oklch(0.48 0.014 265);
-  --primary: oklch(0.928 0.008 265);
-  --primary-foreground: oklch(0.196 0.009 265);
-  --secondary: oklch(0.256 0.01 265);
-  --secondary-foreground: oklch(0.928 0.008 265);
-  --accent: oklch(0.256 0.01 265);
-  --accent-foreground: oklch(0.928 0.008 265);
-  --destructive: oklch(0.704 0.155 22);
-  --destructive-foreground: oklch(0.145 0.008 265);
-
-  --defect: oklch(0.733 0.129 25);
-  --defect-bg: oklch(0.268 0.055 25);
-  --review: oklch(0.799 0.117 75);
-  --review-bg: oklch(0.268 0.043 75);
-  --clean: oklch(0.793 0.134 157);
-  --clean-bg: oklch(0.268 0.055 157);
-  --uncertain: oklch(0.746 0.108 292);
-  --uncertain-bg: oklch(0.268 0.067 292);
-}
-
-* { border-color: var(--border); }
+* { border-color: var(--line); }
 
 html, body, #root { height: 100%; }
 
 body {
   margin: 0;
-  background: var(--background);
-  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: var(--fs-body);
+  /* The canvas lives on .ambient, which sits behind everything. This stays
+     set so there is no flash of white before it paints. */
+  background: var(--canvas);
+  color: var(--ink);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+code, pre, .tabular, .mono { font-family: var(--font-mono); }
+.tabular { font-variant-numeric: tabular-nums; }
+
+h1 { font-size: var(--fs-h1); line-height: 1.12; letter-spacing: -0.02em; }
+h2 { font-size: var(--fs-h2); line-height: 1.25; letter-spacing: -0.01em; }
+
+:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track { background: transparent; }

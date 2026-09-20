@@ -2,7 +2,7 @@ import type { Result } from './api'
 
 export const CATEGORY_LABELS: Record<string, string> = {
   BL_COMPARISON: 'Document checks',
-  SI_REQUEST: 'Document requests',
+  SI_REQUEST: 'Draft requests',
   INVOICE_QUERY: 'Invoice queries',
   GENERAL: 'General',
   SPAM: 'Spam',
@@ -55,4 +55,41 @@ export const relative = (iso: string | null): string => {
   if (seconds < 3600) return `${Math.floor(seconds / 60)} min ago`
   if (seconds < 86400) return `${Math.floor(seconds / 3600)} h ago`
   return `${Math.floor(seconds / 86400)} d ago`
+}
+
+
+/**
+ * "Good morning" / "Good afternoon" / "Good evening".
+ *
+ * Local to the browser, deliberately: the person reading the screen is the
+ * one whose time of day matters, not the server's.
+ */
+export function greeting(now = new Date()): string {
+  const h = now.getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+/**
+ * The name to greet, or nothing.
+ *
+ * Empty when signing in with a service token rather than Google, which has
+ * no name behind it. "Good evening, there" is worse than "Good evening".
+ */
+export function firstName(me: { name?: string; email?: string } | null): string {
+  if (!me) return ''
+  const given = (me.name || '').trim().split(/\s+/)[0]
+  if (given) return given
+  const local = (me.email || '').split('@')[0]
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : ''
+}
+
+/** Two letters for the avatar. */
+export function initials(me: { name?: string; email?: string } | null): string {
+  if (!me) return '?'
+  const parts = (me.name || '').trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (me.email || '?').slice(0, 2).toUpperCase()
 }

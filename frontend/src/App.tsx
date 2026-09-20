@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { LogOut } from 'lucide-react'
+import { AnimatePresence, motion } from 'motion/react'
+import { CircleHelp, Clock, Filter, Mail, TriangleAlert } from 'lucide-react'
 import Controls from './Controls'
 import Deck from './Deck'
 import Detail from './Detail'
 import GmailCard from '@/components/GmailCard'
 import SignIn from '@/components/SignIn'
+import Sidebar from '@/components/layout/Sidebar'
+import TopBar from '@/components/layout/TopBar'
+import StatCard from '@/components/layout/StatCard'
 import {
   api,
   clearToken,
@@ -19,7 +23,10 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
-import { CATEGORY_LABELS, REVIEW_REASONS, TONE_CLASS, relative, statusTone } from './format'
+import {
+  CATEGORY_LABELS, REVIEW_REASONS, TONE_CLASS,
+  firstName, greeting, relative, statusTone,
+} from './format'
 
 // The OAuth callback cannot return JSON — a person's browser lands on it —
 // so it says how it went in the URL and the app reports it here.
@@ -139,9 +146,15 @@ export default function App() {
   }, [data, lane, onlyFlagged])
 
   if (ready === null) {
+    // The session cookie is HttpOnly, so only the server knows. A brief
+    // shimmer beats showing a sign-in screen to somebody already signed in.
     return (
-      <div className="grid h-full place-items-center p-6 text-sm text-muted-foreground">
-        …
+      <div className="grid h-full place-items-center p-6">
+        <div className="w-full max-w-md space-y-3">
+          <div className="skeleton h-9 w-40" />
+          <div className="skeleton h-4 w-full" />
+          <div className="skeleton h-4 w-2/3" />
+        </div>
       </div>
     )
   }
@@ -149,194 +162,211 @@ export default function App() {
 
   const stats = data?.stats
   const empty = stats && stats.total === 0
-  const tiles = [
-    { value: stats?.total, label: 'emails', tone: '' },
-    { value: stats?.defects_found, label: 'with errors', tone: 'text-defect' },
-    { value: stats?.awaiting_review, label: 'need a person', tone: 'text-review' },
-    {
-      value: stats ? `${Math.round(stats.minutes_saved / 60)}h` : undefined,
-      label: 'checking saved',
-      tone: '',
-    },
-  ]
+  const laneLabel = CATEGORY_LABELS[lane] ?? lane
+  // Which group the lane sits in, so the crumb adds something instead of
+  // repeating the heading next to it.
+  const laneGroup =
+    lane === 'BL_COMPARISON' ? 'Verification' : lane === READ_LANE ? 'Done' : 'Inbox'
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex flex-wrap items-center gap-4 border-b px-5 py-3">
-        <div className="font-semibold">
-          VS-Mail
-          <span className="ml-2 text-sm font-normal text-muted-foreground">
-            shipping document checks
-          </span>
-        </div>
+    <div className="app">
+      {/* The ambient wash. Fixed, inert, behind everything. */}
+      <div className="ambient" aria-hidden>
+        <i /><i /><i />
+      </div>
 
-        <div className="flex gap-2">
-          {tiles.map((t) => (
-            <div key={t.label} className="rounded-lg border px-3 py-1.5 text-center">
-              <div className={`text-base font-semibold ${t.tone}`}>{t.value ?? '—'}</div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {t.label}
+      <Sidebar
+        data={data}
+        lane={lane}
+        onLane={(next) => {
+          setLane(next)
+          setSelected(null)
+        }}
+      >
+        {gmail && (
+          <GmailCard
+            gmail={gmail}
+            onChanged={() =>
+              api.gmailStatus().then(setGmail).catch(() => setGmail(null))
+            }
+            onError={setError}
+          />
+        )}
+        {stats?.ran_at && (
+          <div className="mt-3">Last run {relative(stats.ran_at)} · {stats.source}</div>
+        )}
+      </Sidebar>
+
+      <div className="app__main">
+        <TopBar
+          title={laneLabel}
+          crumb={laneGroup}
+          gmail={gmail}
+          me={me}
+          stats={stats}
+          onSignOut={signOut}
+        />
+
+        <main className="app__content">
+          <div className="page">
+            <div className="page-head">
+              <div className="page-head__row">
+                <div className="min-w-0 flex-1">
+                  <motion.h1
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+                  >
+                    {greeting()}
+                    {firstName(me) && `, ${firstName(me)}`}
+                  </motion.h1>
+                  <p className="page-head__sub">
+                    {stats?.awaiting_review
+                      ? `${stats.awaiting_review} cases need a person.`
+                      : 'Shipping document checks and drafted replies.'}
+                  </p>
+                </div>
+                <div className="page-head__actions">
+                  {lane !== READ_LANE && (
+                    <Button
+                      size="sm"
+                      variant={onlyFlagged ? 'default' : 'outline'}
+                      onClick={() => setOnlyFlagged((v) => !v)}
+                    >
+                      <Filter />
+                      Needs attention
+                    </Button>
+                  )}
+                  <Controls gmail={gmail} onChanged={refreshBoth} onError={setError} />
+                </div>
               </div>
             </div>
-          ))}
-        </div>
 
-        <div className="flex-1" />
-        <Controls gmail={gmail} onChanged={refreshBoth} onError={setError} />
-
-        {/* Who is signed in, and the way out. Separate from the mailbox card
-            below, which says which mailbox the app works on. */}
-        <div className="flex items-center gap-2 border-l pl-4">
-          {me && (
-            <span className="max-w-44 truncate text-xs text-muted-foreground" title={me.email}>
-              {me.email}
-            </span>
-          )}
-          <Button size="sm" variant="ghost" onClick={signOut}>
-            <LogOut />
-            Sign out
-          </Button>
-        </div>
-      </header>
-
-      {error && (
-        <div className="mx-5 mt-3 rounded-md bg-defect-bg px-3 py-2 text-sm text-defect">
-          {error}
-        </div>
-      )}
-      {notice && (
-        <button
-          className={`mx-5 mt-3 rounded-md px-3 py-2 text-left text-sm ${notice.tone}`}
-          onClick={() => setNotice(null)}
-        >
-          {notice.message}
-        </button>
-      )}
-
-      <div
-        className={`grid min-h-0 flex-1 divide-x ${
-          lane === READ_LANE ? 'grid-cols-[15rem_22rem_1fr]' : 'grid-cols-[15rem_1fr]'
-        }`}
-      >
-        <nav className="flex flex-col gap-1 overflow-y-auto p-3">
-          <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-            Inbox
-          </h3>
-          {Object.entries(CATEGORY_LABELS).map(([key, label]) => {
-            const items = data?.lanes?.[key] || []
-            // Read is finished work. A red dot there reads as "needs
-            // attention" about something already dealt with.
-            const flagged =
-              key === READ_LANE
-                ? 0
-                : items.filter((r) => r.status !== 'OK').length
-            return (
-              <button
-                key={key}
-                className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-                  lane === key ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-                }`}
-                onClick={() => {
-                  setLane(key)
-                  setSelected(null)
-                }}
-              >
-                <span
-                  className={`size-1.5 shrink-0 rounded-full ${
-                    flagged ? 'bg-defect' : 'bg-border'
-                  }`}
-                />
-                <span className="flex-1 truncate">{label}</span>
-                <span className="text-xs opacity-70">{items.length}</span>
-              </button>
-            )
-          })}
-
-          <h3 className="mt-3 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-            Filter
-          </h3>
-          <button
-            className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              onlyFlagged ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-            }`}
-            onClick={() => setOnlyFlagged((v) => !v)}
-          >
-            Only ones needing attention
-          </button>
-
-          {gmail && (
-            <div className="mt-3">
-              <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-                Mailbox
-              </h3>
-              <GmailCard
-                gmail={gmail}
-                onChanged={() =>
-                  api.gmailStatus().then(setGmail).catch(() => setGmail(null))
-                }
-                onError={setError}
+            <div className="stat-grid">
+              <StatCard label="Emails" value={stats?.total} hint="processed" icon={Mail} delay={0} />
+              <StatCard label="With errors" value={stats?.defects_found} hint="fields disagree" icon={TriangleAlert} tone="bad" delay={0.05} />
+              <StatCard label="Need a person" value={stats?.awaiting_review} hint="escalated" icon={CircleHelp} tone="warn" delay={0.1} />
+              <StatCard
+                label="Checking saved"
+                value={stats ? `${Math.round(stats.minutes_saved / 60)}h` : undefined}
+                hint="against reading by hand"
+                icon={Clock}
+                tone="ok"
+                delay={0.15}
               />
             </div>
-          )}
 
-          {stats?.ran_at && (
-            <div className="mt-3 px-2 text-xs text-muted-foreground">
-              Last run {relative(stats.ran_at)} · {stats.source}
-            </div>
-          )}
-        </nav>
-
-        {lane !== READ_LANE && (
-          <Deck lane={lane} rows={rows} onSent={refreshBoth} />
-        )}
-
-        {lane === READ_LANE && (
-        <div className="min-h-0 overflow-y-auto">
-          {!data && <SkeletonRows rows={6} className="p-3" />}
-          {empty && (
-            <p className="p-6 text-sm text-muted-foreground">
-              Nothing processed yet. Choose a source and press <b>Process inbox</b>.
-            </p>
-          )}
-          {data && !empty && rows.length === 0 && (
-            <p className="p-6 text-sm text-muted-foreground">Nothing here.</p>
-          )}
-          {rows.map((row) => {
-            const tone = statusTone(row)
-            return (
+            {error && (
+              <div className="mb-4 rounded-md bg-defect-bg px-3 py-2 text-sm text-defect">
+                {error}
+              </div>
+            )}
+            {notice && (
               <button
-                key={row.email_id}
-                className={`flex w-full flex-col gap-1 border-b px-4 py-3 text-left transition-colors ${
-                  selected?.result.email_id === row.email_id ? 'bg-accent' : 'hover:bg-muted/50'
-                }`}
-                onClick={() => open(row.email_id)}
+                className={`mb-4 w-full rounded-md px-3 py-2 text-left text-sm ${notice.tone}`}
+                onClick={() => setNotice(null)}
               >
-                <div className="truncate text-xs text-muted-foreground">
-                  {row.sender || row.email_id}
-                </div>
-                <div className="truncate text-sm font-medium">
-                  {row.subject || '(no subject)'}
-                </div>
-                <Badge className={TONE_CLASS[tone]}>
-                  {row.status === 'MISMATCH'
-                    ? row.defect_fields.join(', ')
-                    : row.status === 'NEEDS_REVIEW'
-                      ? REVIEW_REASONS[row.review_reason ?? ''] ||
-                        row.review_reason?.replace(/_/g, ' ')
-                      : row.concerns?.length
-                        ? 'uncertain'
-                        : 'checked'}
-                </Badge>
+                {notice.message}
               </button>
-            )
-          })}
-        </div>
-        )}
+            )}
 
-        {lane === READ_LANE && (
-          <Detail email={selected} onChanged={refreshBoth} onError={setError} />
-        )}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={lane}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+                className="glass-2 min-h-[26rem] overflow-hidden"
+              >
+                {lane !== READ_LANE ? (
+                  <Deck lane={lane} rows={rows} onSent={refreshBoth} />
+                ) : (
+                  <ReadLane
+                    data={data}
+                    rows={rows}
+                    empty={empty}
+                    selected={selected}
+                    onOpen={open}
+                    onChanged={refreshBoth}
+                    onError={setError}
+                  />
+                )}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </main>
       </div>
+    </div>
+  )
+}
+
+/** The archive: rows on the left, the one you clicked on the right. */
+function ReadLane({
+  data,
+  rows,
+  empty,
+  selected,
+  onOpen,
+  onChanged,
+  onError,
+}: {
+  data: Inbox | null
+  rows: Result[]
+  empty: boolean | undefined
+  selected: { result: Result; case: Case | null } | null
+  onOpen: (id: string) => void
+  onChanged: () => void
+  onError: (message: string) => void
+}) {
+  return (
+    <div className="grid min-h-[26rem] grid-cols-[22rem_1fr] divide-x">
+      <div className="max-h-[70vh] min-h-0 overflow-y-auto">
+        {!data && <SkeletonRows rows={6} className="p-3" />}
+        {empty && (
+          <p className="p-6 text-sm text-muted-foreground">
+            Nothing processed yet. Choose a source and press <b>Process inbox</b>.
+          </p>
+        )}
+        {data && !empty && rows.length === 0 && (
+          <p className="p-6 text-sm text-muted-foreground">Nothing sent yet.</p>
+        )}
+        {rows.map((row, i) => {
+          const tone = statusTone(row)
+          return (
+            <motion.button
+              key={row.email_id}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.2, delay: Math.min(i, 12) * 0.02 }}
+              className={`flex w-full flex-col gap-1 border-b px-4 py-3 text-left transition-colors ${
+                selected?.result.email_id === row.email_id
+                  ? 'bg-gold-soft'
+                  : 'hover:bg-muted/50'
+              }`}
+              onClick={() => onOpen(row.email_id)}
+            >
+              <div className="truncate text-xs text-muted-foreground">
+                {row.sender || row.email_id}
+              </div>
+              <div className="truncate text-sm font-medium">
+                {row.subject || '(no subject)'}
+              </div>
+              <Badge className={TONE_CLASS[tone]}>
+                {row.status === 'MISMATCH'
+                  ? row.defect_fields.join(', ')
+                  : row.status === 'NEEDS_REVIEW'
+                    ? REVIEW_REASONS[row.review_reason ?? ''] ||
+                      row.review_reason?.replace(/_/g, ' ')
+                    : row.concerns?.length
+                      ? 'uncertain'
+                      : 'checked'}
+              </Badge>
+            </motion.button>
+          )
+        })}
+      </div>
+      <Detail email={selected} onChanged={onChanged} onError={onError} />
     </div>
   )
 }

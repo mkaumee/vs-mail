@@ -1,0 +1,51 @@
+/* Motion. Everything here is opt-in by class, so a component that wants to
+   stay still stays still.
+ *
+ * The reduced-motion block at the bottom is not decoration: a drifting
+ * background and a shimmering skeleton are exactly what triggers vestibular
+ * symptoms, and the OS-level preference is the one signal we get.
+ */
+@keyframes page-in   { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes pop-in    { from { opacity: 0; transform: translateY(-4px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes shimmer   { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+@keyframes spin      { to { transform: rotate(360deg); } }
+@keyframes pulse-soft{ 0%, 100% { opacity: .45; } 50% { opacity: 1; } }
+@keyframes drift-a   { from { transform: translate3d(0,0,0) scale(1); }    to { transform: translate3d(8vmax, 6vmax, 0) scale(1.08); } }
+@keyframes drift-b   { from { transform: translate3d(0,0,0) scale(1.04); } to { transform: translate3d(-9vmax, 5vmax, 0) scale(.96); } }
+@keyframes drift-c   { from { transform: translate3d(0,0,0) scale(1); }    to { transform: translate3d(7vmax, -6vmax, 0) scale(1.1); } }
+
+.page-enter { animation: page-in 240ms var(--ease-standard) both; }
+.pop-in     { animation: pop-in var(--motion-fast) var(--ease-standard) both; transform-origin: top right; }
+.spin       { animation: spin .9s linear infinite; }
+
+/* The industry-standard loading state: a shaped placeholder with a sweep,
+   not a spinner. It tells you what is coming as well as that something is. */
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--skel-a), var(--skel-b), var(--skel-a));
+  background-size: 200% 100%;
+  animation: shimmer 1.8s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+
+/* Applied for a moment when the theme flips, then removed. Transitioning
+   every property permanently would tax every ordinary interaction. */
+body.theme-anim, body.theme-anim *, body.theme-anim *::before, body.theme-anim *::after {
+  transition: background-color var(--motion-theme) ease, border-color var(--motion-theme) ease,
+    color var(--motion-theme) ease, fill var(--motion-theme) ease,
+    stroke var(--motion-theme) ease, box-shadow var(--motion-theme) ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ambient i { animation: none !important; transform: none !important; }
+  .skeleton { animation: none !important; background: var(--skel-b); }
+  .page-enter, .pop-in { animation: none !important; }
+  .lift:hover { transform: none !important; }
+  .spin { animation: pulse-soft 1.6s ease-in-out infinite !important; }
+}
