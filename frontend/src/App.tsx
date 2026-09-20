@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Controls from './Controls'
+import Deck from './Deck'
 import Detail from './Detail'
 import GmailCard from '@/components/GmailCard'
 import { api, getToken, setToken, type Case, type GmailStatus, type Inbox, type Result } from '@/api'
@@ -72,6 +73,7 @@ export default function App() {
   const [lane, setLane] = useState('BL_COMPARISON')
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [selected, setSelected] = useState<{ result: Result; case: Case | null } | null>(null)
+  const [view, setView] = useState<'list' | 'deck'>('list')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState(readGmailOutcome)
 
@@ -164,7 +166,11 @@ export default function App() {
         </button>
       )}
 
-      <div className="grid min-h-0 flex-1 grid-cols-[15rem_22rem_1fr] divide-x">
+      <div
+        className={`grid min-h-0 flex-1 divide-x ${
+          view === 'deck' ? 'grid-cols-[15rem_1fr]' : 'grid-cols-[15rem_22rem_1fr]'
+        }`}
+      >
         <nav className="flex flex-col gap-1 overflow-y-auto p-3">
           <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
             Inbox
@@ -206,6 +212,19 @@ export default function App() {
             Only ones needing attention
           </button>
 
+          <h3 className="mt-3 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
+            View
+          </h3>
+          <button
+            className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
+              view === 'deck' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
+            }`}
+            onClick={() => setView((v) => (v === 'deck' ? 'list' : 'deck'))}
+            title="One at a time, with the reply ready before you get there"
+          >
+            {view === 'deck' ? 'One at a time' : 'Work through them'}
+          </button>
+
           {gmail && (
             <div className="mt-3">
               <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -222,6 +241,9 @@ export default function App() {
           )}
         </nav>
 
+        {view === 'deck' && <Deck lane={lane} rows={rows} />}
+
+        {view === 'list' && (
         <div className="min-h-0 overflow-y-auto">
           {!data && <SkeletonRows rows={6} className="p-3" />}
           {empty && (
@@ -262,8 +284,11 @@ export default function App() {
             )
           })}
         </div>
+        )}
 
-        <Detail email={selected} onChanged={refreshBoth} onError={setError} />
+        {view === 'list' && (
+          <Detail email={selected} onChanged={refreshBoth} onError={setError} />
+        )}
       </div>
     </div>
   )

@@ -34,7 +34,27 @@ export type Result = {
   bl_source: string | null
 }
 
-export type Draft = { to: string; subject: string; body: string; kind: string }
+export type Citation = {
+  id: string
+  heading: string
+  source: string
+  fabricated: boolean
+}
+
+export type Draft = {
+  to: string
+  subject: string
+  body: string
+  kind: string
+  citations?: Citation[]
+  /** Any cited material was invented for the demo. Shown, never hidden. */
+  fabricated?: boolean
+  /** What the material did not cover, stated rather than filled in. */
+  missing?: string
+}
+
+/** No draft is a real outcome, and `why` is what a person acts on. */
+export type ReplyResponse = { draft: Draft | null; why?: string }
 
 export type Audit = { at: string; by: string; action: string; detail: string }
 
@@ -134,7 +154,7 @@ export const api = {
   // run stored and supplying a value looks like it did nothing.
   recheck: (id: string) =>
     call<{ result: Result }>(`/inbox/${id}/recheck`, { method: 'POST' }),
-  reply: (id: string) => call<{ draft: Draft | null }>(`/inbox/${id}/reply`),
+  reply: (id: string) => call<ReplyResponse>(`/inbox/${id}/reply`),
   replyIntoGmail: (id: string) =>
     call<{ draft: Draft; threaded: boolean }>(`/inbox/${id}/reply/gmail`, {
       method: 'POST',
