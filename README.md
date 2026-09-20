@@ -125,6 +125,53 @@ export VS_SERVICE_TOKEN=<the same token>
 python scripts/run_submission.py --provider remote
 ```
 
+## Signing in
+
+Signing in and connecting a mailbox are different acts, and the app treats
+them that way. Signing in says **who is using this**. Connecting Gmail says
+**which mailbox it works on** — and that mailbox belongs to the deployment,
+not to whoever is looking at the screen.
+
+**Sign in with Google.** A second OAuth flow through the same client, asking
+only for `openid email profile`, so the consent screen says "see your name and
+email address" and nothing about mail. The result is a signed cookie: signed
+rather than encrypted, because nothing in it is secret, but the email inside
+is the identity every route believes and so it must not be editable. The
+expiry is checked after the signature and separately — leaving that to the
+cookie's `Max-Age` would trust the browser to enforce it.
+
+**One more redirect URI**, on the same OAuth client, alongside the Gmail pair:
+
+```
+http://localhost:8000/auth/callback
+https://<your-railway-domain>/auth/callback
+```
+
+Miss it and sign-in fails with `redirect_uri_mismatch`. `GET /auth/status`
+reports the redirect it is about to use, which is otherwise invisible until
+the browser is already at Google.
+
+**Two ways in, both still valid.** A browser presents the session cookie.
+Scripts, `RemoteProvider` and curl present `X-VS-Token` as they always have —
+there is no browser to sign in with and nowhere to put a cookie. The sign-in
+screen keeps the token folded underneath as a fallback, because being locked
+out of your own app mid-demo is worse than an extra input.
+
+| Variable | |
+|---|---|
+| `VS_AUTH_REDIRECT` | where Google returns the browser |
+| `VS_SESSION_SECRET` | signs the cookie; falls back to `VS_SERVICE_TOKEN` |
+| `VS_ALLOWED_USERS` | who may sign in — **empty means anyone** |
+
+⚠️ **`VS_ALLOWED_USERS` is empty by default.** On a public URL that means
+anybody with a Google account can sign in, read the inbox, start a DeepSeek
+run on your credits, and press **Send** — and that mail leaves *your*
+connected Gmail account. Setting it to your own address is one variable and
+no code change.
+
+**Signing out** clears the cookie and drops any stored token. Disconnecting
+Gmail is separate, and is below.
+
 ## Reading a real Gmail mailbox
 
 The pipeline reads the bundle's files by default. It can read a real mailbox
@@ -214,6 +261,18 @@ So treat it as the operating condition it is:
 The app reports this rather than failing silently: a refresh that comes back
 `invalid_grant` shows as an expired authorisation with an invitation to press
 Connect Gmail again, and `/gmail/status` carries `expired: true`.
+
+### Disconnecting
+
+**Disconnect** revokes the grant at Google rather than only deleting our copy.
+Deleting alone leaves Google trusting it, so reconnecting skips the consent
+screen entirely and anyone holding a copy of the token can still use it.
+
+⚠️ When the token came from `VS_GMAIL_TOKEN_JSON`, **the app cannot remove
+it** — a process cannot unset its deployment's environment variable. The
+revoke still kills the token, so what is left is a dead value in a variable,
+and the card says so by name instead of reporting a clean disconnect. Remove
+the variable yourself.
 
 ### When it will not connect
 
