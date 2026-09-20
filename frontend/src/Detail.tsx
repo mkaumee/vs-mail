@@ -87,6 +87,10 @@ function Resolve({
     setSaving(true)
     try {
       await api.resolve(result.email_id, payload)
+      // Then run the comparison again over what was just supplied. Without
+      // this the reviewer sees their own correction change nothing, which
+      // reads as a broken feature rather than a two-step one.
+      await api.recheck(result.email_id)
       setValue('')
       onDone()
     } catch (error) {
@@ -177,6 +181,15 @@ export default function Detail({
 
   const { result, case: reviewCase } = email
   const tone = statusTone(result)
+  // An email a reviewer has already touched keeps its Resolve card even once
+  // it reads OK. Otherwise a value typed wrongly — one that happens to
+  // compare equal — is unreachable: the card that would let you fix it is
+  // hidden by the very outcome the mistake produced.
+  const corrected = Boolean(
+    reviewCase &&
+      (Object.keys(reviewCase.corrections?.si ?? {}).length ||
+        Object.keys(reviewCase.corrections?.bl ?? {}).length),
+  )
   const summary =
     result.status === 'MISMATCH'
       ? `${result.defect_fields.length} field${result.defect_fields.length === 1 ? '' : 's'} differ`
@@ -224,9 +237,10 @@ export default function Detail({
 
       <Fields fields={result.fields} />
 
-      {result.category === 'BL_COMPARISON' && result.status !== 'OK' && (
-        <Resolve result={result} onDone={onChanged} onError={onError} />
-      )}
+      {result.category === 'BL_COMPARISON' &&
+        (result.status !== 'OK' || corrected) && (
+          <Resolve result={result} onDone={onChanged} onError={onError} />
+        )}
 
       {reviewCase?.audit && reviewCase.audit.length > 0 && (
         <Card>

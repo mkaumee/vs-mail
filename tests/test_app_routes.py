@@ -109,3 +109,59 @@ def test_watch_reports_that_it_is_not_running(client, auth):
 
 def test_stopping_a_watcher_that_is_not_running_is_not_an_error(client, auth):
     assert client.post("/watch/stop", headers=auth).json() == {"stopped": False}
+
+
+# -- resolving has to become visible -------------------------------------
+def test_a_resolution_is_invisible_until_the_email_is_rechecked(client, auth):
+    """The bug this pins was only findable by using the app.
+
+    `resolve` records a value and deliberately does not write a verdict — the
+    comparator has to run again over it. Nothing did, so the page kept showing
+    what the original run stored and a reviewer supplying a correct value saw
+    absolutely nothing happen.
+    """
+    before = client.get("/inbox/email_516", headers=auth).json()["result"]
+    assert before["status"] == "NEEDS_REVIEW"
+    assert before["review_reason"] == "missing_value"
+
+    client.post(
+        "/review/email_516/resolve",
+        headers=auth,
+        json={"by": "test", "si": {"gross_weight_kg": "235,550 KG"}},
+    )
+    # Recording alone changes nothing the page can see.
+    assert client.get("/inbox/email_516", headers=auth).json()["result"]["status"] == (
+        "NEEDS_REVIEW"
+    )
+
+    assert client.post("/inbox/email_516/recheck", headers=auth).status_code == 200
+    after = client.get("/inbox/email_516", headers=auth).json()["result"]
+    assert after["status"] == "OK"
+    assert any("corrected by a reviewer" in p for p in after["provenance"])
+
+
+def test_a_wrong_supplied_value_is_compared_not_accepted(client, auth):
+    """A reviewer supplies an input, never a verdict."""
+    client.post(
+        "/review/email_516/resolve",
+        headers=auth,
+        json={"by": "test", "si": {"gross_weight_kg": "999 KG"}},
+    )
+    client.post("/inbox/email_516/recheck", headers=auth)
+    result = client.get("/inbox/email_516", headers=auth).json()["result"]
+    assert result["status"] == "MISMATCH"
+    assert result["defect_fields"] == ["gross_weight_kg"]
+
+
+def test_rechecking_an_unknown_email_is_a_404(client, auth):
+    assert client.post("/inbox/nope/recheck", headers=auth).status_code == 404
+
+
+def test_a_recheck_does_not_pretend_the_whole_inbox_was_rerun(client, auth):
+    """`ran_at` describes the run that produced the other 519 rows. A single
+    retry restamping it would make the whole table look fresher than it is."""
+    before = client.get("/stats", headers=auth).json()
+    client.post("/inbox/email_516/recheck", headers=auth)
+    after = client.get("/stats", headers=auth).json()
+    assert after["ran_at"] == before["ran_at"]
+    assert after["total"] == before["total"]

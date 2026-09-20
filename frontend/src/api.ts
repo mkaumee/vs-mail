@@ -127,4 +127,9 @@ export const api = {
   stopWatch: () => call<{ stopped: boolean }>('/watch/stop', { method: 'POST' }),
   resolve: (id: string, body: unknown) =>
     call<unknown>(`/review/${id}/resolve`, { method: 'POST', body }),
+  // Resolving records a value; it does not write a verdict. Something has to
+  // run the comparator over it, or the page keeps showing what the original
+  // run stored and supplying a value looks like it did nothing.
+  recheck: (id: string) =>
+    call<{ result: Result }>(`/inbox/${id}/recheck`, { method: 'POST' }),
 }

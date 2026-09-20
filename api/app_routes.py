@@ -95,6 +95,39 @@ async def inbox_item(email_id: str) -> dict:
     }
 
 
+@app_router.post("/inbox/{email_id}/recheck")
+async def recheck(email_id: str) -> dict:
+    """Reprocess one email and update what the page reads.
+
+    This is what makes a resolution visible. `/review/{id}/resolve` records a
+    reviewer's value but deliberately does not write a verdict — the
+    comparator has to run again over it. Until something does that, the page
+    keeps showing the result the original run stored, so supplying a value
+    looks like it did nothing.
+
+    Only this email is reprocessed; the other 519 are left alone.
+    """
+    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    bundle = _source(source)
+    try:
+        email = bundle.get(email_id)
+    except Exception:
+        raise HTTPException(404, detail=f"no such email: {email_id}")
+
+    review = _review()
+    provider = _provider(os.environ.get("VS_PROVIDER", "mock").lower())
+    try:
+        processed = await pipeline.process_email(bundle, provider, email, store=review)
+    finally:
+        await provider.aclose()
+
+    # The case is re-synced too, so a resolution that did not go far enough
+    # reopens rather than vanishing from the queue.
+    review.sync([processed])
+    result = _results().update_one(processed, email)
+    return {"result": asdict(result)}
+
+
 @app_router.get("/stats")
 async def stats() -> dict:
     return _results().stats()

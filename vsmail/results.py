@@ -142,6 +142,19 @@ class ResultStore:
         self.source = source
         self.save()
 
+    def update_one(self, processed, record: EmailRecord | None = None) -> Result:
+        """Replace one email's result after it was reprocessed on its own.
+
+        Deliberately does not touch `ran_at` or `source`: those describe the
+        run that produced the rest of the table, and a single retry is not a
+        new run. Saying otherwise would make the whole inbox look fresher than
+        it is.
+        """
+        result = summarize(processed, record)
+        self.results[processed.verdict.email_id] = result
+        self.save()
+        return result
+
     # -- what the app asks for -------------------------------------------
     def lanes(self) -> dict[str, list[Result]]:
         """Grouped by category, comparison requests first."""
