@@ -8,3 +8,10 @@ pydantic>=2.8
 google-api-python-client>=2.140
 google-auth-oauthlib>=1.2
 google-auth-httplib2>=0.2
+
+# Local embeddings for the knowledge base. No API and no second key:
+# DeepSeek has no embeddings endpoint, and the model is committed under
+# models/ so a deploy needs nothing from HuggingFace.
+onnxruntime>=1.20
+tokenizers>=0.20
+numpy>=1.26
