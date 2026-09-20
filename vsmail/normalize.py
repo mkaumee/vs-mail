@@ -43,6 +43,18 @@ def is_placeholder(value: str | None) -> bool:
     return not stripped or bool(_PLACEHOLDER.match(stripped))
 
 
+#: A space sitting between two CJK characters. Removed; see `normalize_name`.
+#: Traditional against Simplified (紙業 / 纸业) is deliberately *not* folded.
+#: Mapping between them needs a real conversion table, and getting it subtly
+#: wrong would silently merge two different companies. Left as a difference,
+#: which the model's equivalence judge (`vsmail/equivalence.py`) can raise as
+#: possibly-the-same for a person to settle — which is what that exists for.
+_CJK_SPACE = re.compile(
+    r"(?<=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
+    r"\s+"
+    r"(?=[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff])"
+)
+
 #: A UN/LOCODE or similar code in trailing brackets, either style.
 _PARENTHETICAL = re.compile(r"[(\[]([^)\]]*)[)\]]")
 
@@ -56,6 +68,28 @@ _UNITS: tuple[tuple[re.Pattern[str], float], ...] = (
     (re.compile(r"(?<![A-Za-z])(?:MT|M/?TONS?|METRIC\s*TONS?|TONNES?)(?![A-Za-z])", re.I), 1000.0),
     (re.compile(r"(?<![A-Za-z])(?:KGS?|KILOS?|KILOGRAMS?)(?![A-Za-z])", re.I), 1.0),
 )
+
+
+#: Letters NFKD will not decompose, because the mark is part of the letter
+#: rather than an accent on it. Ø is not O-with-a-stroke to Unicode, it is its
+#: own letter — so "ØRSTED" would keep the Ø and never match "ORSTED", and
+#: Vietnamese "ĐƠN" would never match "DON". Both spellings turn up in real
+#: party names, so they are mapped by hand.
+_STROKED = str.maketrans({
+    "Ø": "O", "ø": "o", "Đ": "D", "đ": "d", "Ð": "D", "ð": "d",
+    "Ł": "L", "ł": "l", "Ħ": "H", "ħ": "h", "Ŧ": "T", "ŧ": "t",
+    "Æ": "AE", "æ": "ae", "Œ": "OE", "œ": "oe", "ß": "ss", "Þ": "TH", "þ": "th",
+})
+
+
+def fold_accents(text: str) -> str:
+    """Strip accents and stroke marks, leaving the base letters.
+
+    Shared with `vsmail.documents.kinds`, so a document title and a party name
+    are folded the same way and a pattern only needs writing once.
+    """
+    decomposed = unicodedata.normalize("NFKD", text.translate(_STROKED))
+    return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
 def normalize_name(value: str | None) -> str | None:
@@ -75,10 +109,13 @@ def normalize_name(value: str | None) -> str | None:
     """
     if value is None:
         return None
-    decomposed = unicodedata.normalize("NFKD", value)
-    without_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
-    folded = re.sub(r"(?:[^\w]|_)+", " ", without_accents).strip().upper()
-    return re.sub(r"\s+", " ", folded) or None
+    folded = re.sub(r"(?:[^\w]|_)+", " ", fold_accents(value)).strip().upper()
+    collapsed = re.sub(r"\s+", " ", folded)
+    # A space between two CJK characters is layout, not a word break — those
+    # scripts do not separate words with spaces, so "上海 紙業" and "上海紙業"
+    # are the same name typed two ways. Only between CJK: a space between
+    # Latin words is still a word break.
+    return re.sub(_CJK_SPACE, "", collapsed) or None
 
 
 def normalize_port(value: str | None) -> str | None:

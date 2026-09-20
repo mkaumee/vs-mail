@@ -14,16 +14,72 @@ from __future__ import annotations
 
 import re
 
+from vsmail.normalize import fold_accents
+
 #: How many lines from the top to search. A document's kind is stated in its
 #: heading; the spreadsheet attachments put a company name above it, so the
 #: window is a little wider than the first line.
 HEAD_LINES = 12
 
+#: Titles in the languages this trade actually uses. English only was a fair
+#: bet against a bundle written in English, and a poor one against a customer
+#: who attaches a 商业发票.
+#:
+#: Accents are folded out of the text before matching (see `_fold`), so the
+#: patterns here are written unaccented — "HOA DON" matches "HÓA ĐƠN" — which
+#: keeps them readable and avoids a second spelling per entry.
+#:
+#: The list cannot be exhaustive, and does not need to be. A miss degrades
+#: safely: the extractor reads a commercial invoice, finds no shipping fields,
+#: returns nulls, and the email escalates as `missing_value` instead of
+#: `wrong_doc_type`. The wrong reason, but still a person's desk rather than a
+#: wrong answer.
 _PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
-    ("commercial_invoice", re.compile(r"\bCOMMERCIAL\s+INVOICE\b", re.I)),
-    ("packing_list", re.compile(r"\bPACKING\s+LIST\b", re.I)),
-    ("certificate_of_origin", re.compile(r"\bCERTIFICATE\s+OF\s+ORIGIN\b", re.I)),
+    (
+        "commercial_invoice",
+        re.compile(
+            r"\bCOMMERCIAL\s+INVOICE\b"          # English
+            r"|商业发票|商業發票"                      # Chinese
+            r"|\bFACTURA\s+COMERCIAL\b"           # Spanish
+            r"|\bFATURA\s+COMERCIAL\b"            # Portuguese
+            r"|\bFACTURE\s+COMMERCIALE\b"         # French
+            r"|\bHANDELSRECHNUNG\b"                # German
+            r"|\bHOA\s+DON\s+THUONG\s+MAI\b"      # Vietnamese
+            r"|\bFAKTUR\s+KOMERSIAL\b",           # Indonesian
+            re.I,
+        ),
+    ),
+    (
+        "packing_list",
+        re.compile(
+            r"\bPACKING\s+LIST\b"
+            r"|装箱单|裝箱單"
+            r"|\bLISTA\s+DE\s+EMPAQUE\b"
+            r"|\bLISTA\s+DE\s+EMBALAGEM\b"
+            r"|\bLISTE\s+DE\s+COLISAGE\b"
+            r"|\bPACKLISTE\b"
+            r"|\bPHIEU\s+DONG\s+GOI\b"
+            r"|\bDAFTAR\s+KEMASAN\b",
+            re.I,
+        ),
+    ),
+    (
+        "certificate_of_origin",
+        re.compile(
+            r"\bCERTIFICATE\s+OF\s+ORIGIN\b"
+            r"|原产地证|原產地證"
+            r"|\bCERTIFICADO\s+DE\s+ORIGEN\b"
+            r"|\bCERTIFICADO\s+DE\s+ORIGEM\b"
+            r"|\bCERTIFICAT\s+D['’\s]*ORIGINE\b"
+            r"|\bURSPRUNGSZEUGNIS\b"
+            r"|\bGIAY\s+CHUNG\s+NHAN\s+XUAT\s+XU\b",
+            re.I,
+        ),
+    ),
 )
+
+
+
 
 #: Kinds that disqualify a document from being compared.
 DISQUALIFYING = frozenset(name for name, _ in _PATTERNS)
@@ -38,7 +94,7 @@ def detect_doc_kind(text: str) -> str | None:
     """
     if not text.strip():
         return None
-    head = "\n".join(text.splitlines()[:HEAD_LINES])
+    head = fold_accents("\n".join(text.splitlines()[:HEAD_LINES]))
     for name, pattern in _PATTERNS:
         if pattern.search(head):
             return name

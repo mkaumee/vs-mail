@@ -159,3 +159,41 @@ def test_the_port_trap_survives_the_bracket_change():
     assert normalize_port("PORT KLANG (WESTPORT), MALAYSIA (MYPKG)") != normalize_port(
         "SINGAPORE, SINGAPORE (MYPKG)"
     )
+
+
+# -- other languages ------------------------------------------------------
+def test_stroke_letters_fold_because_nfkd_will_not():
+    """Ø and Đ are their own letters to Unicode, not O and D with marks, so
+    decomposition leaves them alone. Both turn up in real party names."""
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("ØRSTED PAPER A/S") == normalize_name("ORSTED PAPER A/S")
+    assert normalize_name("CÔNG TY GIẤY ĐÀ NẴNG") == normalize_name("CONG TY GIAY DA NANG")
+    assert normalize_name("MÆRSK PAPER") == normalize_name("MAERSK PAPER")
+
+
+def test_full_width_latin_folds():
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("ＡＣＭＥ ＰＡＰＥＲ ＬＴＤ") == normalize_name("ACME PAPER LTD")
+
+
+def test_a_space_between_cjk_characters_is_layout_not_a_word_break():
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("上海 紙業有限公司") == normalize_name("上海紙業有限公司")
+
+
+def test_a_space_between_latin_words_is_still_a_word_break():
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("ACME PAPER") != normalize_name("ACMEPAPER")
+
+
+def test_traditional_and_simplified_stay_different():
+    """Deliberate. Folding them needs a real conversion table, and getting it
+    subtly wrong would merge two different companies silently. The model's
+    equivalence judge can raise it as possibly-the-same instead."""
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("上海紙業有限公司") != normalize_name("上海纸业有限公司")

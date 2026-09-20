@@ -52,3 +52,29 @@ def test_a_scan_with_no_text_has_no_detectable_kind(read_attachment):
 def test_a_mention_far_below_the_heading_is_ignored():
     text = "\n".join(["BILL OF LADING (DRAFT)"] + ["filler"] * 30 + ["PACKING LIST"])
     assert detect_doc_kind(text) is None
+
+
+def test_a_disqualifying_document_is_caught_in_other_languages():
+    """English-only was a fair bet against an English bundle and a poor one
+    against a customer who attaches a 商业发票."""
+    from vsmail.documents.kinds import detect_doc_kind
+
+    cases = [
+        ("商业发票", "commercial_invoice"),
+        ("FACTURA COMERCIAL", "commercial_invoice"),
+        ("HÓA ĐƠN THƯƠNG MẠI", "commercial_invoice"),
+        ("装箱单", "packing_list"),
+        ("PACKLISTE", "packing_list"),
+        ("原产地证", "certificate_of_origin"),
+        ("CERTIFICAT D'ORIGINE", "certificate_of_origin"),
+        ("CERTIFICAT D\u2019ORIGINE", "certificate_of_origin"),
+    ]
+    for heading, expected in cases:
+        assert detect_doc_kind(heading + "\nSeller: ACME\n") == expected, heading
+
+
+def test_a_shipping_document_is_still_comparable_in_any_language():
+    from vsmail.documents.kinds import detect_doc_kind
+
+    assert detect_doc_kind("SHIPPING INSTRUCTION\nShipper: ACME") is None
+    assert detect_doc_kind("BILL OF LADING INSTRUCTION\nShipper: ACME") is None

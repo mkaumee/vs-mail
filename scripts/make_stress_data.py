@@ -82,6 +82,27 @@ CASES = [
      "ARGUABLE: same count, different equipment. We compare count only."),
     ("915", {"CONTAINERS": "10 x 20'FCL"}, {"CONTAINERS": "9 x 20'FCL"}, "MISMATCH",
      "one container short"),
+    # -- other languages -------------------------------------------------
+    ("919", {"CONSIGNEE": "CÔNG TY GIẤY ĐÀ NẴNG"},
+     {"CONSIGNEE": "CONG TY GIAY DA NANG"}, "OK",
+     "Vietnamese: Đ is a letter, not an accent, so NFKD alone misses it"),
+    ("920", {"CONSIGNEE": "ØRSTED PAPER A/S"},
+     {"CONSIGNEE": "ORSTED PAPER A/S"}, "OK",
+     "Nordic stroke letters"),
+    ("921", {"CONSIGNEE": "MÆRSK PAPER"}, {"CONSIGNEE": "MAERSK PAPER"}, "OK",
+     "a ligature spelled out"),
+    ("922", {"CONSIGNEE": "上海 紙業有限公司"},
+     {"CONSIGNEE": "上海紙業有限公司"}, "OK",
+     "CJK does not separate words with spaces"),
+    ("923", {"CONSIGNEE": "上海紙業有限公司"},
+     {"CONSIGNEE": "上海纸业有限公司"}, "MISMATCH",
+     "ARGUABLE: traditional against simplified. Left as a difference for the "
+     "equivalence judge to raise rather than folded by a table we might get "
+     "subtly wrong."),
+    ("924", {"CONSIGNEE": "ＡＣＭＥ ＰＡＰＥＲ ＬＴＤ"},
+     {"CONSIGNEE": "ACME PAPER LTD"}, "OK",
+     "full-width Latin"),
+
     # -- blanks and placeholders ----------------------------------------
     ("916", {"GROSS WEIGHT": "N/A"}, {"GROSS WEIGHT": "22,000 KG"}, "NEEDS_REVIEW",
      "a placeholder is a blank, not a value"),
@@ -157,6 +178,24 @@ def main() -> None:
             "body": body, "attachments": [],
         }, indent=2))
         manifest.append({"email_id": eid, "expect": expect, "why": why})
+
+    # A commercial invoice in Chinese where the draft BL should be.
+    eid = "email_942"
+    (OUT / "attachments" / f"{eid}_SI.txt").write_text(render(BASE))
+    (OUT / "attachments" / f"{eid}_BL.txt").write_text(
+        "商业发票\nCOMMERCIAL INVOICE No. INV-99120\n\n"
+        "卖方 Seller: APRIL FINE PAPER TRADING\n"
+        "买方 Buyer: KPP-ANTALIS (SINGAPORE) PTE. LTD.\n"
+        "金额 Amount: USD 48,200.00\n"
+    )
+    (OUT / "inbox" / f"{eid}.json").write_text(json.dumps({
+        "email_id": eid, "from": "docs@vitalsolutions.sg",
+        "subject": "TO CONFIRM DOCS _ 5STR-94200",
+        "body": COMPARE_BODY.format(ref="5STR-94200"),
+        "attachments": [f"attachments/{eid}_SI.txt", f"attachments/{eid}_BL.txt"],
+    }, indent=2))
+    manifest.append({"email_id": eid, "expect": "NEEDS_REVIEW",
+                     "why": "a Chinese commercial invoice in the BL slot"})
 
     # A comparison whose BL never arrived, and one whose file will not open.
     eid = "email_940"

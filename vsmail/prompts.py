@@ -71,6 +71,13 @@ Rules:
   stated total over counting or adding rows yourself.
 - Use null when a field is genuinely absent or left blank. Never guess, and
   never copy a value from the other document to fill a gap.
+- **Use null for a field that states no value, in whatever language.** A
+  document may fill a field with a stand-in rather than leave it empty:
+  "N/A", "TBA", "TBD", "____MT", "???", "pending", and the same idea in any
+  other language — "待定", "未定", "por definir", "a confirmer", "zu
+  bestaetigen". These are blanks wearing a value's clothes. Returned as text
+  they get compared, and the pair is reported as a discrepancy that does not
+  exist. This is the one place the "copy exactly" rule above does not apply.
 
 Reply with JSON only:
 {{"si": {{<field>: <value or null>, ...}},

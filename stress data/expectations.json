@@ -75,6 +75,36 @@
     "why": "one container short"
   },
   {
+    "email_id": "email_919",
+    "expect": "OK",
+    "why": "Vietnamese: \u0110 is a letter, not an accent, so NFKD alone misses it"
+  },
+  {
+    "email_id": "email_920",
+    "expect": "OK",
+    "why": "Nordic stroke letters"
+  },
+  {
+    "email_id": "email_921",
+    "expect": "OK",
+    "why": "a ligature spelled out"
+  },
+  {
+    "email_id": "email_922",
+    "expect": "OK",
+    "why": "CJK does not separate words with spaces"
+  },
+  {
+    "email_id": "email_923",
+    "expect": "MISMATCH",
+    "why": "ARGUABLE: traditional against simplified. Left as a difference for the equivalence judge to raise rather than folded by a table we might get subtly wrong."
+  },
+  {
+    "email_id": "email_924",
+    "expect": "OK",
+    "why": "full-width Latin"
+  },
+  {
     "email_id": "email_916",
     "expect": "NEEDS_REVIEW",
     "why": "a placeholder is a blank, not a value"
@@ -118,6 +148,11 @@
     "email_id": "email_935",
     "expect": null,
     "why": "a body with no words in it"
+  },
+  {
+    "email_id": "email_942",
+    "expect": "NEEDS_REVIEW",
+    "why": "a Chinese commercial invoice in the BL slot"
   },
   {
     "email_id": "email_940",
