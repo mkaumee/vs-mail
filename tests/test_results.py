@@ -79,3 +79,20 @@ def test_summarize_handles_an_email_with_no_documents(processed):
     result = summarize(spam, None)
     assert result.fields == []
     assert result.si_source is None
+
+
+def test_clearing_forgets_the_run(store):
+    """Clearing the mailbox used to leave all 520 results on screen, because
+    they live here rather than in Gmail — so "clear" did half of what it said."""
+    assert len(store.results) == 520
+
+    dropped = store.clear()
+
+    assert dropped == 520
+    assert store.results == {}
+    assert store.ran_at is None
+    assert store.source is None
+    # And it survives a reload, or the next request brings them all back.
+    from vsmail.results import ResultStore
+
+    assert ResultStore(store.path).results == {}

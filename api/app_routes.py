@@ -155,7 +155,18 @@ async def reply_draft(email_id: str) -> dict:
     from vsmail.knowledge.index import get_index
 
     if result.category not in ANSWERABLE:
-        return {"draft": None, "why": "no reply is drafted for this kind of email"}
+        # Saying which kind, and why, rather than leaving a blank space that
+        # reads as a broken page. Most General mail is berthing reports, RPA
+        # notices and greetings that nobody replies to, and answering spam is
+        # never the right move.
+        why = {
+            "GENERAL": (
+                "General mail is triaged, not answered — these are notices, "
+                "reports and acknowledgements that need no reply"
+            ),
+            "SPAM": "spam is never replied to",
+        }.get(result.category, "no reply is drafted for this kind of email")
+        return {"draft": None, "why": why}
 
     source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
     try:
@@ -523,16 +534,38 @@ async def gmail_seed(payload: dict | None = None) -> dict:
 
 
 @app_router.post("/gmail/reset")
-async def gmail_reset() -> dict:
+async def gmail_reset(payload: dict | None = None) -> dict:
+    """Bin the seeded messages, and optionally forget the run as well.
+
+    `also_results` defaults to false so `scripts/` keeps its old behaviour.
+    The page sends true, because clearing the mailbox while leaving all 520
+    results on screen is "clear" doing half of what it says.
+    """
+    payload = payload or {}
+    also_results = bool(payload.get("also_results"))
+
     async def work(job):
         import asyncio
 
         from vsmail.gmail import seed as seeding
-        from vsmail.gmail.client import service
+        from vsmail.gmail.client import NotAuthorised, service
 
-        job.say("moving seeded messages to the bin")
-        result = await asyncio.to_thread(seeding.reset, service())
-        job.say(f"binned {result['trashed']}")
+        result: dict = {"trashed": 0, "mailbox": False}
+        try:
+            svc = service()
+        except NotAuthorised:
+            # Nothing to bin. Clearing the screen should still work, so this
+            # is not an error — a run from the bundle has no mailbox behind it.
+            job.say("no mailbox connected; nothing to bin")
+        else:
+            job.say("moving seeded messages to the bin")
+            binned = await asyncio.to_thread(seeding.reset, svc)
+            result = {**binned, "mailbox": True}
+            job.say(f"binned {binned['trashed']}")
+
+        if also_results:
+            job.say("clearing the last run")
+            result["results_cleared"] = _results().clear()
         return result
 
     return JOBS.start("reset", work).as_dict()

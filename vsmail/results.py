@@ -134,6 +134,20 @@ class ResultStore:
             + "\n"
         )
 
+    def clear(self) -> int:
+        """Forget the last run. Returns how many results were dropped.
+
+        Clearing the mailbox used to leave all 520 results on screen, because
+        they live here rather than in Gmail, so "clear" visibly did half of
+        what it said.
+        """
+        dropped = len(self.results)
+        self.results = {}
+        self.ran_at = None
+        self.source = None
+        self.save()
+        return dropped
+
     def record(self, processed_list, records: dict[str, EmailRecord], source: str) -> None:
         for processed in processed_list:
             email_id = processed.verdict.email_id
