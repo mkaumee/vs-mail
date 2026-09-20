@@ -114,6 +114,15 @@ class Jobs:
             task.cancel()
         return True
 
+    def running(self) -> list[Job]:
+        """Whatever is in flight.
+
+        Work outlives the tab that started it, so a reloaded page asks for
+        this and adopts what it finds — otherwise a seed carries on filling
+        the mailbox while the screen says nothing is happening.
+        """
+        return [job for job in self._jobs.values() if job.state == RUNNING]
+
     def all(self) -> list[dict]:
         return [job.as_dict() for job in self._jobs.values()]
 

@@ -40,8 +40,19 @@ def _with_retries(call):
     raise RuntimeError("unreachable")  # pragma: no cover
 
 
-def seed(service, bundle: Bundle | None = None, limit: int | None = None) -> dict:
-    """Insert the bundle's emails, preserving sender, subject and body."""
+def seed(
+    service,
+    bundle: Bundle | None = None,
+    limit: int | None = None,
+    on_progress=None,
+) -> dict:
+    """Insert the bundle's emails, preserving sender, subject and body.
+
+    `on_progress(done, total)` is called after every message. Without it
+    this runs for a minute and reports nothing until the end, so the page
+    showed "0 of 520" throughout and then jumped — which reads as hung
+    rather than working.
+    """
     bundle = bundle or Bundle()
     emails = bundle.emails()
     if limit:
@@ -84,6 +95,8 @@ def seed(service, bundle: Bundle | None = None, limit: int | None = None) -> dic
             time.sleep(max(0.0, interval - (time.monotonic() - started)))
         except Exception as exc:
             failed.append((email.email_id, str(exc)))
+        if on_progress:
+            on_progress(inserted, len(emails))
 
     return {"mailbox": mailbox, "inserted": inserted, "failed": failed}
 

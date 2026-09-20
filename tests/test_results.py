@@ -96,3 +96,37 @@ def test_clearing_forgets_the_run(store):
     from vsmail.results import ResultStore
 
     assert ResultStore(store.path).results == {}
+
+
+def test_a_sent_reply_leaves_its_lane_for_read(store):
+    """A queue that still holds what you have answered stops being a queue."""
+    from vsmail.results import READ
+
+    before = store.lanes()
+    assert "email_004" in [r.email_id for r in before["BL_COMPARISON"]]
+    assert before[READ] == []
+
+    store.mark_sent("email_004")
+    after = store.lanes()
+
+    assert "email_004" not in [r.email_id for r in after["BL_COMPARISON"]]
+    assert [r.email_id for r in after[READ]] == ["email_004"]
+    assert len(after["BL_COMPARISON"]) == len(before["BL_COMPARISON"]) - 1
+
+
+def test_being_read_survives_a_reload(store):
+    from vsmail.results import READ, ResultStore
+
+    store.mark_sent("email_004")
+    assert ResultStore(store.path).lanes()[READ][0].email_id == "email_004"
+
+
+def test_the_category_is_untouched_by_being_read(store):
+    """READ is a lane, not a category. The submission carries the category,
+    and the schema allows exactly five."""
+    store.mark_sent("email_004")
+    assert store.results["email_004"].category == "BL_COMPARISON"
+
+
+def test_marking_an_unknown_email_is_not_an_error(store):
+    assert store.mark_sent("email_999") is None

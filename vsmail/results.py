@@ -26,6 +26,11 @@ PRIORITY = {
     "SPAM": 4,
 }
 
+#: Where an email goes once its reply has actually been sent. A lane, never a
+#: category: `category` is what the submission carries, and the schema allows
+#: exactly the five above.
+READ = "READ"
+
 
 @dataclass
 class Result:
@@ -47,6 +52,9 @@ class Result:
     si_source: str | None = None
     bl_source: str | None = None
     gmail_message_id: str | None = None
+    #: When a reply was actually sent. A saved draft does not count —
+    #: nobody has been replied to yet.
+    sent_at: str | None = None
 
     @property
     def priority(self) -> int:
@@ -169,12 +177,30 @@ class ResultStore:
         self.save()
         return result
 
+    def mark_sent(self, email_id: str, when: str | None = None) -> Result | None:
+        """Record that a reply actually went out, which moves it to READ."""
+        from datetime import datetime, timezone
+
+        result = self.results.get(email_id)
+        if result is None:
+            return None
+        result.sent_at = when or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self.save()
+        return result
+
     # -- what the app asks for -------------------------------------------
     def lanes(self) -> dict[str, list[Result]]:
-        """Grouped by category, comparison requests first."""
+        """Grouped by category, comparison requests first.
+
+        Anything replied to leaves its lane for READ. A queue that still
+        holds what you have already answered stops being a queue — you lose
+        your place every time the list reorders around work that is done.
+        """
         grouped: dict[str, list[Result]] = {name: [] for name in PRIORITY}
+        grouped[READ] = []
         for result in self.results.values():
-            grouped.setdefault(result.category, []).append(result)
+            lane = READ if result.sent_at else result.category
+            grouped.setdefault(lane, []).append(result)
         for items in grouped.values():
             # Within a lane, anything wrong or uncertain rises to the top.
             items.sort(

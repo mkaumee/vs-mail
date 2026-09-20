@@ -76,3 +76,35 @@ async def test_the_log_is_capped():
     job = jobs.start("demo", work)
     await asyncio.sleep(0.05)
     assert len(job.log) == 50
+
+
+def test_running_reports_what_is_in_flight():
+    """Work outlives the tab that started it. A reloaded page asks for this
+    and adopts what it finds, instead of showing an idle screen while the
+    mailbox fills up behind it."""
+    import asyncio
+
+    from vsmail.jobs import Jobs
+
+    async def scenario():
+        jobs = Jobs()
+        gate = asyncio.Event()
+
+        async def slow(job):
+            await gate.wait()
+            return {"ok": True}
+
+        async def quick(job):
+            return {"ok": True}
+
+        started = jobs.start("seed", slow)
+        jobs.start("run", quick)
+        await asyncio.sleep(0)  # let `quick` finish
+
+        in_flight = [j.id for j in jobs.running()]
+        gate.set()
+        await asyncio.sleep(0)
+        return started.id, in_flight
+
+    started_id, in_flight = asyncio.run(scenario())
+    assert in_flight == [started_id]

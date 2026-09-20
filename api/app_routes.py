@@ -260,6 +260,10 @@ async def send_reply_route(email_id: str, payload: dict | None = None) -> dict:
         raise HTTPException(422, detail=str(exc))
     except Exception as exc:
         raise HTTPException(502, detail=f"Gmail refused to send: {exc}")
+
+    # Replied to, so it leaves the queue. Only a real send does this: a saved
+    # draft has not answered anybody.
+    _results().mark_sent(email_id)
     return sent
 
 
@@ -361,6 +365,17 @@ async def start_run(payload: dict | None = None) -> dict:
         }
 
     return JOBS.start("run", work).as_dict()
+
+
+@app_router.get("/jobs/running")
+async def running_jobs() -> dict:
+    """Whatever is in flight right now.
+
+    The page asks on load. Work runs in this process and outlives the tab, so
+    a reload used to lose sight of a seed that was still going — the mailbox
+    filled up while the screen said nothing was happening.
+    """
+    return {"jobs": [job.as_dict() for job in JOBS.running()]}
 
 
 @app_router.get("/jobs")
@@ -525,7 +540,13 @@ async def gmail_seed(payload: dict | None = None) -> dict:
         # event loop free so progress can still be polled.
         import asyncio
 
-        result = await asyncio.to_thread(seeding.seed, svc, None, limit)
+        def progress(done: int, total: int) -> None:
+            # Called from the seeder's thread. An int assignment is all this
+            # is, and the page polls rather than being pushed to.
+            job.done = done
+            job.total = total
+
+        result = await asyncio.to_thread(seeding.seed, svc, None, limit, progress)
         job.done = result["inserted"]
         job.say(f"inserted {result['inserted']} into {result['mailbox']}")
         return result
