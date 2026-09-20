@@ -26,9 +26,19 @@ const KIND_LABEL: Record<string, string> = {
  */
 export default function ReplyCard({
   emailId,
+  /**
+   * Anything about the verdict that would change the reply.
+   *
+   * Keying only on the email id was a bug with teeth: a reviewer corrected
+   * both fields, the verdict became OK, and the card went on offering the
+   * reply that asks the customer to amend them. That draft is one click from
+   * being sent.
+   */
+  version,
   onError,
 }: {
   emailId: string
+  version: string
   onError: (message: string) => void
 }) {
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -44,7 +54,7 @@ export default function ReplyCard({
       .reply(emailId)
       .then((r) => setDraft(r.draft))
       .catch(() => setDraft(null))
-  }, [emailId])
+  }, [emailId, version])
 
   if (!draft) return null
 

@@ -47,6 +47,10 @@ REASON_SEVERITY: dict[str, int] = {
 
 OPEN = "open"
 RESOLVED = "resolved"
+#: A case a person opened by acting on an email the run settled on its own.
+#: Distinct from the reasons the system raises, so the queue and the audit can
+#: tell "we could not decide this" from "somebody wanted to correct it".
+REVIEWER_INITIATED = "reviewer_initiated"
 #: The escalation was correct and a person has accepted it. Distinct from
 #: RESOLVED because a resolution is an attempt to fix the email, which can
 #: fall short, whereas an acknowledgement is a decision that there is nothing
@@ -285,7 +289,17 @@ class ReviewStore:
         """
         case = self.cases.get(email_id)
         if case is None:
-            raise KeyError(f"no case for {email_id}")
+            # An email the run decided on its own — a mismatch, say — has no
+            # case, because nothing was escalated. A person can still want to
+            # correct a misread value, and refusing them was a real bug: the
+            # page offered Resolve on all 46 mismatches and every one 404'd.
+            #
+            # Opening it here does not flood the queue. `queue()` lists only
+            # OPEN cases, and this one is closed a few lines below by the same
+            # call that created it.
+            case = Case(email_id=email_id, reason=REVIEWER_INITIATED)
+            case.record("opened", by, "opened by a reviewer; not escalated")
+            self.cases[email_id] = case
 
         for side, values in (("si", si), ("bl", bl)):
             for name, value in (values or {}).items():

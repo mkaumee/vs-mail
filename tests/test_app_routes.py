@@ -199,3 +199,47 @@ def test_writing_into_gmail_without_a_mailbox_explains_itself(client, auth, monk
     response = client.post("/inbox/email_004/reply/gmail", headers=auth)
     assert response.status_code == 400
     assert "Connect Gmail" in response.json()["detail"]
+
+
+def test_a_mismatch_can_be_resolved_through_the_api(client, auth):
+    """Regression, found by clicking Resolve on a mismatch.
+
+    Cases are opened for what the run could not decide, so a MISMATCH — which
+    was decided — had none, and every one of the 46 mismatch emails offered a
+    Resolve card that returned 404.
+    """
+    before = client.get("/inbox/email_004", headers=auth).json()["result"]
+    assert before["status"] == "MISMATCH"
+    assert before["defect_fields"] == ["consignee", "notify_party"]
+
+    for field in ("consignee", "notify_party"):
+        r = client.post(
+            "/review/email_004/resolve",
+            headers=auth,
+            json={"by": "test", "bl": {field: "EAST BRIGHT FZ-LLC"}},
+        )
+        assert r.status_code == 200, r.text
+    client.post("/inbox/email_004/recheck", headers=auth)
+
+    after = client.get("/inbox/email_004", headers=auth).json()["result"]
+    assert after["status"] == "OK"
+
+
+def test_the_drafted_reply_follows_the_corrected_verdict(client, auth):
+    """Regression with teeth. The reply card keyed only on the email id, so
+    after a correction it went on offering the draft asking the customer to
+    amend fields that were now correct — one click from being sent."""
+    asks_amendment = client.get("/inbox/email_004/reply", headers=auth).json()
+    assert "Kindly amend" in asks_amendment["draft"]["body"]
+
+    for field in ("consignee", "notify_party"):
+        client.post(
+            "/review/email_004/resolve",
+            headers=auth,
+            json={"by": "test", "bl": {field: "EAST BRIGHT FZ-LLC"}},
+        )
+    client.post("/inbox/email_004/recheck", headers=auth)
+
+    confirms = client.get("/inbox/email_004/reply", headers=auth).json()
+    assert confirms["draft"]["kind"] == "confirm"
+    assert "please proceed to release" in confirms["draft"]["body"]

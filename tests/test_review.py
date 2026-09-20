@@ -90,9 +90,18 @@ def test_an_unknown_field_is_refused(store, processed):
         store.resolve("email_516", by="me", si={"vessel_name": "X"})
 
 
-def test_resolving_an_unknown_case_fails(store):
-    with pytest.raises(KeyError):
-        store.resolve("email_999", by="me", confirm=True)
+def test_resolving_an_email_with_no_case_opens_one(store):
+    """This used to raise KeyError, and that was wrong.
+
+    `sync` opens cases for what the run could not decide, so a MISMATCH —
+    decided — has none. The page still offers Resolve on it, because a
+    reviewer can correct a misread value, and refusing meant all 46
+    mismatches had a button that 404'd.
+    """
+    from vsmail.review import REVIEWER_INITIATED
+
+    case = store.resolve("email_999", by="me", confirm=True)
+    assert case.reason == REVIEWER_INITIATED
 
 
 async def test_a_supplied_value_reaches_its_verdict_through_the_comparator(
@@ -193,3 +202,40 @@ async def test_a_complete_fix_closes_the_case_and_it_stays_closed(
         store.sync(after)
         assert store.get("email_518").state == RESOLVED
         assert after[0].verdict.status != "NEEDS_REVIEW"
+
+
+def test_resolving_an_email_that_was_never_escalated_opens_a_case(tmp_path):
+    """Regression, found by clicking Resolve on a mismatch.
+
+    `sync` opens cases for what the run could not decide. A MISMATCH was
+    decided, so it has no case — but the page offers Resolve on it, and
+    refusing meant all 46 mismatches had a button that 404'd.
+    """
+    from vsmail.review import REVIEWER_INITIATED, ReviewStore
+
+    store = ReviewStore(tmp_path / "review.json")
+    case = store.resolve("email_004", by="reviewer", bl={"consignee": "ACME LTD"})
+
+    assert case.reason == REVIEWER_INITIATED
+    assert case.corrections["bl"]["consignee"] == "ACME LTD"
+    assert store.corrections_for("email_004")["bl"] == {"consignee": "ACME LTD"}
+
+
+def test_a_reviewer_opened_case_does_not_sit_in_the_queue(tmp_path):
+    """It is closed by the same call that created it, so it never joins the
+    list of things waiting on a person."""
+    from vsmail.review import ReviewStore
+
+    store = ReviewStore(tmp_path / "review.json")
+    store.resolve("email_004", by="reviewer", bl={"consignee": "ACME LTD"})
+    assert [c.email_id for c in store.queue()] == []
+
+
+def test_the_audit_says_who_opened_it(tmp_path):
+    from vsmail.review import ReviewStore
+
+    store = ReviewStore(tmp_path / "review.json")
+    case = store.resolve("email_004", by="mkaumee", si={"shipper": "X"})
+    opened = [a for a in case.audit if a["action"] == "opened"]
+    assert opened and opened[0]["by"] == "mkaumee"
+    assert "not escalated" in opened[0]["detail"]

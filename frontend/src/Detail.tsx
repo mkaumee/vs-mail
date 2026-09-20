@@ -243,7 +243,11 @@ export default function Detail({
           <Resolve result={result} onDone={onChanged} onError={onError} />
         )}
 
-      <ReplyCard emailId={result.email_id} onError={onError} />
+      <ReplyCard
+        emailId={result.email_id}
+        version={`${result.status}:${result.defect_fields.join(',')}:${result.provenance.length}`}
+        onError={onError}
+      />
 
       {reviewCase?.audit && reviewCase.audit.length > 0 && (
         <Card>
