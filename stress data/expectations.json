@@ -1,0 +1,132 @@
+[
+  {
+    "email_id": "email_901",
+    "expect": "OK",
+    "why": "tonnes against kilograms is the same weight"
+  },
+  {
+    "email_id": "email_902",
+    "expect": "OK",
+    "why": "digit grouping and a trailing zero are formatting"
+  },
+  {
+    "email_id": "email_903",
+    "expect": "OK",
+    "why": "no space between number and unit"
+  },
+  {
+    "email_id": "email_904",
+    "expect": "MISMATCH",
+    "why": "same number, different unit, is a real defect"
+  },
+  {
+    "email_id": "email_905",
+    "expect": "OK",
+    "why": "a code on one side only"
+  },
+  {
+    "email_id": "email_906",
+    "expect": "MISMATCH",
+    "why": "the email_119 trap: code carried over, port changed"
+  },
+  {
+    "email_id": "email_907",
+    "expect": "OK",
+    "why": "a parenthetical that is part of the name, plus a code"
+  },
+  {
+    "email_id": "email_908",
+    "expect": "OK",
+    "why": "square brackets instead of parentheses \u2014 arguable, and worth knowing"
+  },
+  {
+    "email_id": "email_909",
+    "expect": "OK",
+    "why": "hyphens and full stops are punctuation"
+  },
+  {
+    "email_id": "email_910",
+    "expect": "MISMATCH",
+    "why": "different legal entities sharing a name"
+  },
+  {
+    "email_id": "email_911",
+    "expect": "OK",
+    "why": "an accent is not a different company"
+  },
+  {
+    "email_id": "email_912",
+    "expect": "OK",
+    "why": "leading and trailing whitespace"
+  },
+  {
+    "email_id": "email_913",
+    "expect": "OK",
+    "why": "the count is what is compared"
+  },
+  {
+    "email_id": "email_914",
+    "expect": "OK",
+    "why": "ARGUABLE: same count, different equipment. We compare count only."
+  },
+  {
+    "email_id": "email_915",
+    "expect": "MISMATCH",
+    "why": "one container short"
+  },
+  {
+    "email_id": "email_916",
+    "expect": "NEEDS_REVIEW",
+    "why": "a placeholder is a blank, not a value"
+  },
+  {
+    "email_id": "email_917",
+    "expect": "NEEDS_REVIEW",
+    "why": "an underscore fill is a blank"
+  },
+  {
+    "email_id": "email_918",
+    "expect": "NEEDS_REVIEW",
+    "why": "blank on both sides is still not a match"
+  },
+  {
+    "email_id": "email_930",
+    "expect": "INVOICE_QUERY",
+    "why": "an invoice we hold no record of \u2014 must not be invented"
+  },
+  {
+    "email_id": "email_931",
+    "expect": "GENERAL",
+    "why": "nothing in the corpus covers this"
+  },
+  {
+    "email_id": "email_932",
+    "expect": "SI_REQUEST",
+    "why": "the misleading subject: it says confirm, the body says send"
+  },
+  {
+    "email_id": "email_933",
+    "expect": null,
+    "why": "ARGUABLE: asks two different things in one email"
+  },
+  {
+    "email_id": "email_934",
+    "expect": null,
+    "why": "no subject and no body at all"
+  },
+  {
+    "email_id": "email_935",
+    "expect": null,
+    "why": "a body with no words in it"
+  },
+  {
+    "email_id": "email_940",
+    "expect": "NEEDS_REVIEW",
+    "why": "the BL never arrived"
+  },
+  {
+    "email_id": "email_941",
+    "expect": "NEEDS_REVIEW",
+    "why": "a corrupt PDF"
+  }
+]

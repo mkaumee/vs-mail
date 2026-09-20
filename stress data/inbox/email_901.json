@@ -1,0 +1,10 @@
+{
+  "email_id": "email_901",
+  "from": "docs@vitalsolutions.sg",
+  "subject": "TO CONFIRM DOCS _ 5STR-90100",
+  "body": "Dear Team,\n\nPlease compare the SI and draft BL for 5STR-90100 and confirm.\n\nBest Regards,\nOps Desk",
+  "attachments": [
+    "attachments/email_901_SI.txt",
+    "attachments/email_901_BL.txt"
+  ]
+}

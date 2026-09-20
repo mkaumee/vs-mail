@@ -11,6 +11,7 @@ are different entities and collapsing them would hide a real defect.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 #: Text that fills a field without stating a value. A document writing "N/A",
 #: "TBA" or "____MT" has left the field blank, and treating any of those as a
@@ -42,25 +43,41 @@ def is_placeholder(value: str | None) -> bool:
     return not stripped or bool(_PLACEHOLDER.match(stripped))
 
 
-#: A UN/LOCODE or similar code in trailing parentheses.
-_PARENTHETICAL = re.compile(r"\(([^)]*)\)")
+#: A UN/LOCODE or similar code in trailing brackets, either style.
+_PARENTHETICAL = re.compile(r"[(\[]([^)\]]*)[)\]]")
 
 #: Weight units, as a multiplier into kilograms.
+#:
+#: Bounded by letters rather than `\b`. A word boundary needs a non-word
+#: character before the unit, and in "22MT" the character before M is "2" —
+#: so `\bMT\b` never matched, the multiplier stayed at 1, and 22MT compared
+#: as 22 kg against 22,000 kg. A real defect reported for a missing space.
 _UNITS: tuple[tuple[re.Pattern[str], float], ...] = (
-    (re.compile(r"\b(?:MT|M/?TONS?|METRIC\s*TONS?|TONNES?)\b", re.I), 1000.0),
-    (re.compile(r"\b(?:KGS?|KILOS?|KILOGRAMS?)\b", re.I), 1.0),
+    (re.compile(r"(?<![A-Za-z])(?:MT|M/?TONS?|METRIC\s*TONS?|TONNES?)(?![A-Za-z])", re.I), 1000.0),
+    (re.compile(r"(?<![A-Za-z])(?:KGS?|KILOS?|KILOGRAMS?)(?![A-Za-z])", re.I), 1.0),
 )
 
 
 def normalize_name(value: str | None) -> str | None:
-    """Fold case, punctuation and spacing on a party or place name.
+    """Fold case, accents, punctuation and spacing on a party or place name.
 
     Punctuation becomes a space rather than vanishing, so "KPP-ANTALIS" and
     "KPP ANTALIS" agree while distinct words never run together.
+
+    Accents are folded rather than destroyed. The old rule kept only
+    `[0-9A-Za-z]`, so "CAFÉ DO BRASIL" became "CAF DO BRASIL" and read as a
+    different company from "CAFE DO BRASIL" — a false defect on any name that
+    is not plain ASCII, which in this trade is a great many of them. Decompose
+    first and drop the combining mark, and É becomes E.
+
+    Non-Latin scripts survive too: `\w` is Unicode-aware, so a Chinese or
+    Cyrillic name is kept rather than erased down to nothing.
     """
     if value is None:
         return None
-    folded = re.sub(r"[^0-9A-Za-z]+", " ", value).strip().upper()
+    decomposed = unicodedata.normalize("NFKD", value)
+    without_accents = "".join(c for c in decomposed if not unicodedata.combining(c))
+    folded = re.sub(r"(?:[^\w]|_)+", " ", without_accents).strip().upper()
     return re.sub(r"\s+", " ", folded) or None
 
 
@@ -76,8 +93,11 @@ def normalize_port(value: str | None) -> str | None:
     if value is None:
         return None
     # "PORT KLANG (WESTPORT), MALAYSIA (MYPKG)" keeps WESTPORT, which is part
-    # of the port's name, and drops only a trailing all-caps code.
-    without_code = re.sub(r"\(\s*[A-Z]{5}\s*\)\s*$", "", value.strip())
+    # of the port's name, and drops only a trailing all-caps code. Square
+    # brackets count: a code is a code whichever way it was typed.
+    without_code = re.sub(
+        r"[(\[]\s*[A-Z]{5}\s*[)\]]\s*$", "", value.strip()
+    )
     return normalize_name(without_code)
 
 

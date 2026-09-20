@@ -98,3 +98,64 @@ def test_real_values_are_not_placeholders(value):
     from vsmail.normalize import is_placeholder
 
     assert not is_placeholder(value)
+
+
+# -- found by the stress inbox -------------------------------------------
+def test_a_unit_with_no_space_still_converts():
+    """`\\b` needs a non-word character before the unit, and in "22MT" the
+    character before M is "2". So the multiplier stayed at 1 and 22MT compared
+    as 22 kg against 22,000 kg — a defect reported for a missing space."""
+    from vsmail.normalize import normalize_weight_kg
+
+    assert normalize_weight_kg("22MT") == 22000.0
+    assert normalize_weight_kg("22 MT") == 22000.0
+    assert normalize_weight_kg("1500KGS") == 1500.0
+
+
+def test_a_unit_inside_a_longer_word_is_not_a_unit():
+    """The boundary still has to hold in the other direction."""
+    from vsmail.normalize import normalize_weight_kg
+
+    assert normalize_weight_kg("22 MTX") == 22.0
+
+
+def test_an_accent_is_not_a_different_company():
+    """Keeping only [0-9A-Za-z] turned "CAFÉ" into "CAF", so any name that is
+    not plain ASCII read as a different entity — and in this trade a great
+    many are not."""
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("CAFÉ DO BRASIL LTDA") == normalize_name("CAFE DO BRASIL LTDA")
+    assert normalize_name("MÜLLER GMBH") == normalize_name("MULLER GMBH")
+    assert normalize_name("ØRSTED A/S") is not None
+
+
+def test_a_non_latin_name_is_not_erased():
+    """`\\w` is Unicode-aware, so a Chinese name survives rather than
+    normalising down to nothing."""
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("上海紙業有限公司") == "上海紙業有限公司"
+
+
+def test_accents_do_not_collapse_genuinely_different_names():
+    from vsmail.normalize import normalize_name
+
+    assert normalize_name("ACME PAPER LTD") != normalize_name("ACME PAPER FZE")
+
+
+def test_a_port_code_in_square_brackets_is_still_a_code():
+    from vsmail.normalize import normalize_port
+
+    assert normalize_port("SINGAPORE [SGSIN]") == normalize_port("SINGAPORE")
+    assert normalize_port("SINGAPORE (SGSIN)") == normalize_port("SINGAPORE")
+
+
+def test_the_port_trap_survives_the_bracket_change():
+    """The whole reason codes are ignored: email_119 carries (MYPKG) on both
+    sides while the port itself changes."""
+    from vsmail.normalize import normalize_port
+
+    assert normalize_port("PORT KLANG (WESTPORT), MALAYSIA (MYPKG)") != normalize_port(
+        "SINGAPORE, SINGAPORE (MYPKG)"
+    )
