@@ -56,6 +56,31 @@ export type Draft = {
 /** No draft is a real outcome, and `why` is what a person acts on. */
 export type ReplyResponse = { draft: Draft | null; why?: string }
 
+/**
+ * The email being replied to.
+ *
+ * Not stored on `Result` — read through the source, so there is one copy of
+ * each body and it cannot go stale. `core_body` is the trimmed request the
+ * classifier saw; `body` is the whole thing, for when the trim looks wrong.
+ */
+export type IncomingEmail = {
+  email_id: string
+  sender: string
+  subject: string
+  body: string
+  core_body: string
+  attachments: string[]
+  si_source: string | null
+  bl_source: string | null
+}
+
+export type Sent = {
+  message_id: string
+  sent_to: string
+  diverted_from: string | null
+  threaded: boolean
+}
+
 export type Audit = { at: string; by: string; action: string; detail: string }
 
 export type Case = {
@@ -155,8 +180,19 @@ export const api = {
   recheck: (id: string) =>
     call<{ result: Result }>(`/inbox/${id}/recheck`, { method: 'POST' }),
   reply: (id: string) => call<ReplyResponse>(`/inbox/${id}/reply`),
+  // The email itself. A reply approved without reading what it answers is
+  // not really approved.
+  incoming: (id: string) => call<IncomingEmail>(`/inbox/${id}/email`),
   replyIntoGmail: (id: string) =>
     call<{ draft: Draft; threaded: boolean }>(`/inbox/${id}/reply/gmail`, {
       method: 'POST',
     }),
+  // The words on screen are what goes out, not the ones we composed. Where
+  // it goes is decided by the server, which refuses without a test address.
+  sendReply: (
+    id: string,
+    body: { to: string; subject: string; body: string; test_recipient?: string; allow_real?: boolean },
+  ) => call<Sent>(`/inbox/${id}/reply/send`, { method: 'POST', body }),
+  clearEverything: () =>
+    call<Job>('/gmail/reset', { method: 'POST', body: { also_results: true } }),
 }

@@ -112,14 +112,22 @@ export default function Controls({
           >
             {busy && job.kind === 'seed' ? `Seeding${progress}` : 'Seed Gmail'}
           </Button>
-          <Button variant="outline" disabled={busy} onClick={() => start(() => api.resetGmail())}>
-            Clear Gmail
-          </Button>
           <Button variant={watching ? 'secondary' : 'outline'} onClick={toggleWatch}>
             {watching ? '● Watching — stop' : 'Watch for new mail'}
           </Button>
         </>
       )}
+
+      {/* Outside the Gmail block: the results are on screen whether or not a
+          mailbox is connected, and "Clear Gmail" used to leave all 520 of
+          them sitting there because they live in a different store. */}
+      <Button
+        variant="outline"
+        disabled={busy}
+        onClick={() => start(() => api.clearEverything())}
+      >
+        Clear everything
+      </Button>
 
       {busy && <span className="text-xs text-muted-foreground">{job.message}</span>}
       {stats?.ran_at && !busy && (

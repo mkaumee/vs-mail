@@ -1,71 +1,13 @@
 import { useState } from 'react'
-import { api, type Case, type FieldRow, type Result } from '@/api'
+import { api, type Case, type Result } from '@/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import Fields from '@/components/Fields'
 import ReplyCard from '@/components/ReplyCard'
 import { FIELD_LABELS, REVIEW_REASONS, TONE_CLASS, statusTone } from './format'
 
 const FIELDS = Object.keys(FIELD_LABELS)
-
-// The comparison table is the whole point of the product, so it shows what
-// each document said *and* why two differently written values were accepted.
-// Proving the absence of a false alarm is otherwise invisible: nobody notices
-// a defect that was correctly not raised.
-function Fields({ fields }: { fields: FieldRow[] }) {
-  if (!fields?.length) return null
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-sm">The seven fields</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-40">Field</TableHead>
-              <TableHead>Shipping instruction</TableHead>
-              <TableHead>Draft bill of lading</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {fields.map((f) => (
-              <TableRow
-                key={f.field}
-                className={!f.equal ? 'bg-defect-bg hover:bg-defect-bg' : undefined}
-              >
-                <TableCell
-                  className={
-                    !f.equal ? 'font-semibold text-defect' : 'text-muted-foreground'
-                  }
-                >
-                  {FIELD_LABELS[f.field] || f.field}
-                </TableCell>
-                <TableCell className="whitespace-normal">
-                  {f.si ?? <em className="text-muted-foreground">blank</em>}
-                </TableCell>
-                <TableCell className="whitespace-normal">
-                  {f.bl ?? <em className="text-muted-foreground">blank</em>}
-                  {f.equal && f.note && (
-                    <span className="mt-1 block text-xs text-clean">✓ {f.note}</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </CardContent>
-    </Card>
-  )
-}
 
 // Resolving supplies a value; it never writes a verdict. The comparison runs
 // again over what the reviewer typed, so a wrong value produces a mismatch
