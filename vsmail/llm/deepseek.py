@@ -20,7 +20,12 @@ from vsmail.config import CATEGORIES, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL, FIELDS
 from vsmail.models import Classification, Document, EmailRecord, Extraction
 from vsmail.normalize import is_placeholder
 from vsmail.consensus import merge
-from vsmail.prompts import CLASSIFY_SYSTEM, EXTRACT_SYSTEM, JUDGE_SYSTEM
+from vsmail.prompts import (
+    ANSWER_SYSTEM,
+    CLASSIFY_SYSTEM,
+    EXTRACT_SYSTEM,
+    JUDGE_SYSTEM,
+)
 
 #: Retried on transient failures; a 520-email run should not die on one 503.
 _RETRIES = 3
@@ -151,6 +156,27 @@ class DeepSeekProvider:
         if not isinstance(same, list):
             return ()
         return tuple(str(field) for field in same)
+
+    async def answer(self, question: str, material: list[dict]) -> dict:
+        """Draft a reply body from retrieved material.
+
+        `material` is the chunks, each with an id the model is told to cite.
+        Returns the body, the ids it says it used, and whatever it could not
+        answer — all three surface to the reviewer, because a drafted answer
+        nobody can check against a source is not usable in this domain.
+        """
+        context = "\n\n".join(
+            f"[{c['id']}] {c['heading']}\n{c['text']}" for c in material
+        )
+        data = await self._json_call(
+            ANSWER_SYSTEM, f"Reference material:\n\n{context}\n\n---\n\nEmail:\n{question}"
+        )
+        used = data.get("used")
+        return {
+            "body": str(data.get("body") or "").strip(),
+            "used": [str(u) for u in used] if isinstance(used, list) else [],
+            "missing": str(data.get("missing") or "").strip(),
+        }
 
     async def aclose(self) -> None:
         await self._client.aclose()

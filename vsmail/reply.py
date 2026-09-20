@@ -87,9 +87,27 @@ class Draft:
     body: str
     #: What this reply is for, so the page can label it honestly.
     kind: str
+    #: Where an answered reply drew its material from. Empty for the composed
+    #: ones, which quote the documents in front of the reader. A drafted
+    #: answer nobody can check against a source is not usable here.
+    citations: tuple = ()
+    #: True when any cited material was invented for the demo. Carried to the
+    #: screen — quoting a fabricated charge to a customer unmarked would be
+    #: worse than declining to answer.
+    fabricated: bool = False
+    #: What the material did not cover, said plainly rather than filled in.
+    missing: str = ""
 
     def as_dict(self) -> dict:
-        return {"to": self.to, "subject": self.subject, "body": self.body, "kind": self.kind}
+        return {
+            "to": self.to,
+            "subject": self.subject,
+            "body": self.body,
+            "kind": self.kind,
+            "citations": [dict(c) for c in self.citations],
+            "fabricated": self.fabricated,
+            "missing": self.missing,
+        }
 
 
 def _subject(original: str) -> str:

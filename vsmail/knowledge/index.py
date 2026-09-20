@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
@@ -134,3 +135,15 @@ class Index:
 
 def available(path: Path | None = None) -> bool:
     return (path or INDEX).is_file()
+
+
+@lru_cache(maxsize=1)
+def get_index() -> "Index | None":
+    """The index, loaded once. None when it has not been built.
+
+    Cached because a request should not re-read and re-parse 765 KB, and
+    because the answer path is already waiting on a model call.
+    """
+    if not available():
+        return None
+    return Index()

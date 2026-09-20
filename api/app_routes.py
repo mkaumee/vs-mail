@@ -141,10 +141,37 @@ async def reply_draft(email_id: str) -> dict:
     result = _results().results.get(email_id)
     if result is None:
         raise HTTPException(404, detail=f"nothing recorded for {email_id}")
+
+    # A comparison request is composed: its sentences never vary, and the
+    # values are exact strings from the documents.
     draft = compose(result)
-    if draft is None:
-        return {"draft": None, "why": "only comparison requests are replied to"}
-    return {"draft": draft.as_dict()}
+    if draft is not None:
+        return {"draft": draft.as_dict()}
+
+    # Everything else that asks something is answered from the knowledge base.
+    # Slower — it retrieves and then calls the model — which is what the
+    # page's one-ahead prefetch exists to hide.
+    from vsmail.answer import ANSWERABLE, compose_answer
+    from vsmail.knowledge.index import get_index
+
+    if result.category not in ANSWERABLE:
+        return {"draft": None, "why": "no reply is drafted for this kind of email"}
+
+    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    try:
+        email = _source(source).get(email_id)
+    except Exception:
+        email = None
+
+    provider = _provider(os.environ.get("VS_PROVIDER", "mock").lower())
+    try:
+        answered, why = await compose_answer(result, email, get_index(), provider)
+    finally:
+        await provider.aclose()
+
+    if answered is None:
+        return {"draft": None, "why": why}
+    return {"draft": answered.as_dict()}
 
 
 @app_router.post("/inbox/{email_id}/reply/gmail")
