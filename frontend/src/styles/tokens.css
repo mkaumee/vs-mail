@@ -1,19 +1,27 @@
 /* Design tokens, ported from the VS-Mail design prototype.
  *
  * Two layers, and the split matters. The first is the prototype's own
- * vocabulary — canvas, card, accent, the glass levels — written as it wrote
- * them, so a value can be checked against the design without translation.
- * The second, in index.css, points our existing shadcn token names at these.
- * That is what makes the port cheap: every Button, Card, Table and Badge
- * already written takes the new palette without being touched.
+ * vocabulary — canvas, card, gold, the glass levels — so a value can be
+ * checked against the design without translation. The second, in index.css,
+ * points our existing shadcn token names at these. That is what makes the
+ * port cheap: every Button, Card, Table and Badge already written takes the
+ * new palette without being touched.
+ *
+ * Every themed value is `light-dark(light, dark)` and is therefore written
+ * once. The first version of this kept two copies of the dark palette — one
+ * under [data-theme='dark'], one under prefers-color-scheme — and tuning a
+ * single colour meant editing both. That is a drift waiting to happen, and
+ * the toning-down below would have been the first thing to drift.
  */
 
 :root {
+  /* Follow the machine. The two pins below narrow it. */
+  color-scheme: light dark;
+
   --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system,
     'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
-  /* type scale: H1 / H2 / H3 / body / secondary / caption / metadata */
   --fs-h1: clamp(1.5rem, 1.1rem + 1.3vw, 2.0625rem);
   --fs-h2: 1.1875rem;
   --fs-h3: 0.9375rem;
@@ -41,166 +49,86 @@
   --z-drawer: 70;
   --z-modal: 80;
   --z-toast: 90;
+
+  /* -- surfaces --------------------------------------------------------
+   * The dark side is deliberately lifted off black and the text pulled
+   * back off white. Near-black under near-white measures 15.9:1, which is
+   * twice what body text needs and reads as glare rather than clarity —
+   * the look of a theme that was generated rather than lived in. These sit
+   * at 12.6:1, still comfortably past AAA's 7:1.
+   */
+  --canvas:       light-dark(#FAF6F0, #1E1915);
+  --surface:      light-dark(#F4EEE4, #262019);
+  --paper-card:   light-dark(#FFFCF7, #2A231D);
+  --card-hover:   light-dark(#FFFFFF, #322A23);
+  --inset:        light-dark(#F3ECE1, #241E19);
+
+  --ink:          light-dark(#2A211B, #E4DACE);
+  --ink-2:        light-dark(#736254, #BAAEA1);
+  --ink-3:        light-dark(#7A6A5C, #9E9184);
+
+  /* The accent is a shade less saturated in the dark, where a bright gold
+     on a dark ground fluoresces. */
+  --gold:         light-dark(#B98245, #C79C68);
+  --gold-light:   light-dark(#D6A66D, #D4AE7E);
+  --gold-soft:    light-dark(rgba(185, 130, 69, 0.13), rgba(199, 156, 104, 0.10));
+  --gold-border:  light-dark(rgba(185, 130, 69, 0.42), rgba(199, 156, 104, 0.30));
+
+  --line:         light-dark(rgba(180, 155, 130, 0.22), rgba(214, 183, 150, 0.11));
+  --line-strong:  light-dark(rgba(180, 155, 130, 0.38), rgba(214, 183, 150, 0.20));
+
+  --btn-bg:       light-dark(#2A211B, #C79C68);
+  --btn-bg-hover: light-dark(#3A2E26, #D2A974);
+  --btn-fg:       light-dark(#FFFCF7, #221A14);
+
+  /* -- status ----------------------------------------------------------- */
+  --ok:    light-dark(#4F7655, #6F9576);
+  --bad:   light-dark(#A6534B, #B4685F);
+  --warn:  light-dark(#B98245, #C79C68);
+  --note:  light-dark(#63747A, #7C8E95);
+
+  --ok-fg:   light-dark(#3D5F44, #8FB596);
+  --bad-fg:  light-dark(#8D3E37, #D59A92);
+  --warn-fg: light-dark(#80572F, #D3AC77);
+  --note-fg: light-dark(#4B5D63, #A0B2B8);
+
+  --ok-bg:   light-dark(color-mix(in srgb, #4F7655 12%, transparent), color-mix(in srgb, #6F9576 16%, transparent));
+  --bad-bg:  light-dark(color-mix(in srgb, #A6534B 11%, transparent), color-mix(in srgb, #B4685F 16%, transparent));
+  --warn-bg: light-dark(color-mix(in srgb, #B98245 15%, transparent), color-mix(in srgb, #C79C68 14%, transparent));
+  --note-bg: light-dark(color-mix(in srgb, #63747A 12%, transparent), color-mix(in srgb, #7C8E95 16%, transparent));
+
+  /* -- glass ------------------------------------------------------------ */
+  --glass-border: light-dark(rgba(180, 155, 130, 0.22), rgba(214, 183, 150, 0.11));
+  --glass-hl:     light-dark(rgba(255, 255, 255, 0.72), rgba(255, 240, 220, 0.045));
+  --g2-bg: light-dark(rgba(255, 252, 247, 0.62), rgba(42, 35, 29, 0.62));
+  --g3-bg: light-dark(rgba(255, 252, 247, 0.80), rgba(42, 35, 29, 0.80));
+  --g4-bg: light-dark(rgba(255, 252, 247, 0.58), rgba(49, 41, 34, 0.58));
+  --g5-bg: light-dark(rgba(255, 252, 247, 0.86), rgba(42, 35, 29, 0.88));
+  --g2-blur: 24px;
+  --g3-blur: 12px;
+  --g4-blur: 14px;
+  --g5-blur: 28px;
+  --glow: light-dark(rgba(214, 166, 109, 0.22), rgba(199, 156, 104, 0.07));
+
+  /* Softer in the dark: a heavy drop shadow against a dark ground reads as
+     a halo rather than depth. */
+  --shadow-1:     light-dark(0 8px 30px rgba(74, 52, 36, 0.06),  0 8px 28px rgba(0, 0, 0, 0.16));
+  --shadow-2:     light-dark(0 14px 44px rgba(74, 52, 36, 0.12), 0 14px 40px rgba(0, 0, 0, 0.24));
+  --shadow-float: light-dark(0 20px 60px rgba(74, 52, 36, 0.18), 0 20px 56px rgba(0, 0, 0, 0.34));
+
+  --skel-a: light-dark(rgba(180, 155, 130, 0.14), rgba(214, 183, 150, 0.05));
+  --skel-b: light-dark(rgba(180, 155, 130, 0.30), rgba(214, 183, 150, 0.10));
+
+  /* The ambient wash, turned well down in the dark. Warm blobs at the old
+     strength were the loudest thing on the screen. */
+  --amb-a: light-dark(rgba(214, 166, 109, 0.38), rgba(128, 87, 47, 0.16));
+  --amb-b: light-dark(rgba(244, 226, 196, 0.85), rgba(90, 58, 36, 0.16));
+  --amb-c: light-dark(rgba(185, 130, 69, 0.20),  rgba(199, 156, 104, 0.06));
+
+  --focus-ring: light-dark(#9A6A35, #D4AE7E);
 }
 
-/* -- light ------------------------------------------------------------- */
-:root,
-[data-theme='light'] {
-  color-scheme: light;
-  --canvas: #FAF6F0;
-  --surface: #F4EEE4;
-  --paper-card: #FFFCF7;
-  --card-hover: #FFFFFF;
-  --inset: #F3ECE1;
-  --ink: #2A211B;
-  --ink-2: #736254;
-  --ink-3: #7A6A5C;
-
-  --gold: #B98245;
-  --gold-light: #D6A66D;
-  --gold-soft: rgba(185, 130, 69, 0.13);
-  --gold-border: rgba(185, 130, 69, 0.42);
-
-  --line: rgba(180, 155, 130, 0.22);
-  --line-strong: rgba(180, 155, 130, 0.38);
-
-  --btn-bg: #2A211B;
-  --btn-bg-hover: #3A2E26;
-  --btn-fg: #FFFCF7;
-
-  --ok: #4F7655;
-  --bad: #A6534B;
-  --warn: #B98245;
-  --note: #63747A;
-  --ok-fg: #3D5F44;
-  --bad-fg: #8D3E37;
-  --warn-fg: #80572F;
-  --note-fg: #4B5D63;
-  --ok-bg: color-mix(in srgb, var(--ok) 12%, transparent);
-  --bad-bg: color-mix(in srgb, var(--bad) 11%, transparent);
-  --warn-bg: color-mix(in srgb, var(--warn) 15%, transparent);
-  --note-bg: color-mix(in srgb, var(--note) 12%, transparent);
-
-  --glass-border: rgba(180, 155, 130, 0.22);
-  --glass-hl: rgba(255, 255, 255, 0.72);
-  --g2-bg: rgba(255, 252, 247, 0.62);  --g2-blur: 24px;
-  --g3-bg: rgba(255, 252, 247, 0.80);  --g3-blur: 12px;
-  --g4-bg: rgba(255, 252, 247, 0.58);  --g4-blur: 14px;
-  --g5-bg: rgba(255, 252, 247, 0.86);  --g5-blur: 28px;
-  --glow: rgba(214, 166, 109, 0.22);
-
-  --shadow-1: 0 8px 30px rgba(74, 52, 36, 0.06);
-  --shadow-2: 0 14px 44px rgba(74, 52, 36, 0.12);
-  --shadow-float: 0 20px 60px rgba(74, 52, 36, 0.18);
-
-  --skel-a: rgba(180, 155, 130, 0.14);
-  --skel-b: rgba(180, 155, 130, 0.30);
-
-  --amb-a: rgba(214, 166, 109, 0.38);
-  --amb-b: rgba(244, 226, 196, 0.85);
-  --amb-c: rgba(185, 130, 69, 0.20);
-  --focus-ring: #9A6A35;
-}
-
-/* -- dark -------------------------------------------------------------- */
-[data-theme='dark'] {
-  color-scheme: dark;
-  --canvas: #181310;
-  --surface: #211A16;
-  --paper-card: #261F1A;
-  --card-hover: #2D241E;
-  --inset: #1F1814;
-  --ink: #F4EDE4;
-  --ink-2: #B9AA9B;
-  --ink-3: #A89987;
-
-  --gold: #D6A66D;
-  --gold-light: #E5BE8C;
-  --gold-soft: rgba(214, 166, 109, 0.13);
-  --gold-border: rgba(214, 166, 109, 0.42);
-
-  --line: rgba(214, 183, 150, 0.14);
-  --line-strong: rgba(214, 183, 150, 0.24);
-
-  --btn-bg: #D6A66D;
-  --btn-bg-hover: #E2B77F;
-  --btn-fg: #1E1611;
-
-  --ok-fg: #93C29B;
-  --bad-fg: #E39F97;
-  --warn-fg: #E2B57B;
-  --note-fg: #A9BDC3;
-  --ok-bg: color-mix(in srgb, var(--ok) 22%, transparent);
-  --bad-bg: color-mix(in srgb, var(--bad) 22%, transparent);
-  --warn-bg: color-mix(in srgb, var(--warn) 20%, transparent);
-  --note-bg: color-mix(in srgb, var(--note) 22%, transparent);
-
-  --glass-border: rgba(214, 183, 150, 0.14);
-  --glass-hl: rgba(255, 240, 220, 0.06);
-  --g2-bg: rgba(38, 31, 26, 0.68);  --g2-blur: 26px;
-  --g3-bg: rgba(38, 31, 26, 0.84);  --g3-blur: 12px;
-  --g4-bg: rgba(45, 36, 30, 0.62);  --g4-blur: 14px;
-  --g5-bg: rgba(38, 31, 26, 0.90);  --g5-blur: 28px;
-  --glow: rgba(214, 166, 109, 0.13);
-
-  --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.25);
-  --shadow-2: 0 14px 44px rgba(0, 0, 0, 0.36);
-  --shadow-float: 0 22px 64px rgba(0, 0, 0, 0.5);
-
-  --skel-a: rgba(214, 183, 150, 0.06);
-  --skel-b: rgba(214, 183, 150, 0.13);
-
-  --amb-a: rgba(128, 87, 47, 0.34);
-  --amb-b: rgba(90, 58, 36, 0.40);
-  --amb-c: rgba(214, 166, 109, 0.12);
-  --focus-ring: #E5BE8C;
-}
-
-/* Follow the machine until someone picks a side. `data-theme` on <html> is
-   what ThemeSwitcher writes, and it wins because it is more specific. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
-    color-scheme: dark;
-    --canvas: #181310;
-    --surface: #211A16;
-    --paper-card: #261F1A;
-    --card-hover: #2D241E;
-    --inset: #1F1814;
-    --ink: #F4EDE4;
-    --ink-2: #B9AA9B;
-    --ink-3: #A89987;
-    --gold: #D6A66D;
-    --gold-light: #E5BE8C;
-    --gold-soft: rgba(214, 166, 109, 0.13);
-    --gold-border: rgba(214, 166, 109, 0.42);
-    --line: rgba(214, 183, 150, 0.14);
-    --line-strong: rgba(214, 183, 150, 0.24);
-    --btn-bg: #D6A66D;
-    --btn-bg-hover: #E2B77F;
-    --btn-fg: #1E1611;
-    --ok-fg: #93C29B;
-    --bad-fg: #E39F97;
-    --warn-fg: #E2B57B;
-    --note-fg: #A9BDC3;
-    --ok-bg: color-mix(in srgb, var(--ok) 22%, transparent);
-    --bad-bg: color-mix(in srgb, var(--bad) 22%, transparent);
-    --warn-bg: color-mix(in srgb, var(--warn) 20%, transparent);
-    --note-bg: color-mix(in srgb, var(--note) 22%, transparent);
-    --glass-border: rgba(214, 183, 150, 0.14);
-    --glass-hl: rgba(255, 240, 220, 0.06);
-    --g2-bg: rgba(38, 31, 26, 0.68);
-    --g3-bg: rgba(38, 31, 26, 0.84);
-    --g4-bg: rgba(45, 36, 30, 0.62);
-    --g5-bg: rgba(38, 31, 26, 0.90);
-    --glow: rgba(214, 166, 109, 0.13);
-    --shadow-1: 0 8px 30px rgba(0, 0, 0, 0.25);
-    --shadow-2: 0 14px 44px rgba(0, 0, 0, 0.36);
-    --shadow-float: 0 22px 64px rgba(0, 0, 0, 0.5);
-    --skel-a: rgba(214, 183, 150, 0.06);
-    --skel-b: rgba(214, 183, 150, 0.13);
-    --amb-a: rgba(128, 87, 47, 0.34);
-    --amb-b: rgba(90, 58, 36, 0.40);
-    --amb-c: rgba(214, 166, 109, 0.12);
-    --focus-ring: #E5BE8C;
-  }
-}
+/* Pinning a theme is just narrowing the colour scheme; every value above
+   follows from it. */
+:root[data-theme='light'] { color-scheme: light; }
+:root[data-theme='dark']  { color-scheme: dark; }
