@@ -243,3 +243,61 @@ def test_the_drafted_reply_follows_the_corrected_verdict(client, auth):
     confirms = client.get("/inbox/email_004/reply", headers=auth).json()
     assert confirms["draft"]["kind"] == "confirm"
     assert "please proceed to release" in confirms["draft"]["body"]
+
+
+# -- the email being replied to ------------------------------------------
+def test_the_incoming_email_comes_back_with_its_attachments(client, auth):
+    """Approving a reply to an email you cannot read is a hollow approval."""
+    body = client.get("/inbox/email_004/email", headers=auth).json()
+
+    assert body["sender"] == "docs@vitalsolutions.sg"
+    assert "email_004_SI.txt" in " ".join(body["attachments"])
+    assert "email_004_BL.txt" in " ".join(body["attachments"])
+    assert body["body"].strip()
+    # What was read out of each slot, beside the filenames.
+    assert "characters of text" in body["si_source"]
+
+
+def test_the_trimmed_body_is_shorter_than_the_full_one(client, auth):
+    """Both are returned: the trim is what the classifier saw, and a person
+    needs the full text when they suspect it dropped something."""
+    body = client.get("/inbox/email_004/email", headers=auth).json()
+
+    assert len(body["core_body"]) < len(body["body"])
+    assert body["core_body"] in body["body"]
+
+
+def test_an_unknown_email_is_a_404_not_a_500(client, auth):
+    assert client.get("/inbox/email_999/email", headers=auth).status_code == 404
+
+
+# -- sending -------------------------------------------------------------
+def test_sending_needs_a_recipient_subject_and_body(client, auth):
+    response = client.post(
+        "/inbox/email_004/reply/send", headers=auth, json={"to": "a@b.com"}
+    )
+    assert response.status_code == 422
+
+
+def test_sending_without_a_mailbox_is_a_400_not_a_500(client, auth, monkeypatch):
+    """No Gmail connected is a setup problem, and should read as one.
+
+    The file paths are module-level constants in `vsmail.gmail.client`, read
+    once at import, so they are patched there rather than through the
+    environment — which would look like it worked and do nothing.
+    """
+    from pathlib import Path
+
+    from vsmail.gmail import client as gmail_client
+
+    monkeypatch.delenv("VS_GMAIL_CREDENTIALS_JSON", raising=False)
+    monkeypatch.delenv("VS_GMAIL_TOKEN_JSON", raising=False)
+    monkeypatch.setattr(gmail_client, "CREDENTIALS", Path("no-such-file.json"))
+    monkeypatch.setattr(gmail_client, "TOKEN", Path("no-such-token.json"))
+
+    response = client.post(
+        "/inbox/email_004/reply/send",
+        headers=auth,
+        json={"to": "a@b.com", "subject": "RE: x", "body": "hello"},
+    )
+    assert response.status_code == 400

@@ -203,6 +203,88 @@ async def reply_into_gmail(email_id: str) -> dict:
     return {"draft": draft.as_dict(), **created}
 
 
+@app_router.post("/inbox/{email_id}/reply/send")
+async def send_reply_route(email_id: str, payload: dict | None = None) -> dict:
+    """Send the reply, as edited on screen.
+
+    The words that go out are the ones in the payload, not the ones we
+    composed: a person is allowed to change them, and sending something other
+    than what they approved would defeat the approval.
+
+    Where it goes is not theirs to decide by omission. `vsmail.gmail.send`
+    refuses unless a test recipient is set or `allow_real` is explicit, and
+    that refusal is a 422 here rather than a 500.
+    """
+    from vsmail.gmail.client import NotAuthorised, service
+    from vsmail.gmail.send import RefusedToSend, send_reply
+    from vsmail.reply import Draft
+
+    payload = payload or {}
+    result = _results().results.get(email_id)
+    if result is None:
+        raise HTTPException(404, detail=f"nothing recorded for {email_id}")
+
+    to = (payload.get("to") or "").strip()
+    subject = (payload.get("subject") or "").strip()
+    body = (payload.get("body") or "").strip()
+    if not (to and subject and body):
+        raise HTTPException(422, detail="a reply needs a recipient, a subject and a body")
+
+    draft = Draft(to=to, subject=subject, body=body, kind=payload.get("kind", "edited"))
+
+    try:
+        svc = service()
+    except NotAuthorised as exc:
+        raise HTTPException(400, detail=str(exc))
+
+    try:
+        sent = send_reply(
+            svc,
+            draft,
+            result.gmail_message_id,
+            supplied_recipient=payload.get("test_recipient"),
+            allow_real=bool(payload.get("allow_real")),
+        )
+    except RefusedToSend as exc:
+        raise HTTPException(422, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Gmail refused to send: {exc}")
+    return sent
+
+
+@app_router.get("/inbox/{email_id}/email")
+async def incoming_email(email_id: str) -> dict:
+    """The email being replied to.
+
+    Read through the source rather than stored: putting 520 bodies into
+    results.json would duplicate the bundle and go stale the moment a Gmail
+    message changes.
+
+    Both bodies are returned. `core_body` is the trimmed request the
+    classifier actually saw; the full text is what a person needs when they
+    suspect the trim dropped something.
+    """
+    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    try:
+        email = _source(source).get(email_id)
+    except Exception:
+        raise HTTPException(404, detail=f"no such email: {email_id}")
+
+    result = _results().results.get(email_id)
+    return {
+        "email_id": email_id,
+        "sender": email.sender,
+        "subject": email.subject,
+        "body": email.body,
+        "core_body": email.core_body,
+        "attachments": [str(a) for a in email.attachments],
+        # What was actually read out of each slot, so the filenames are not
+        # the only thing a reviewer has to go on.
+        "si_source": result.si_source if result else None,
+        "bl_source": result.bl_source if result else None,
+    }
+
+
 @app_router.get("/stats")
 async def stats() -> dict:
     return _results().stats()
