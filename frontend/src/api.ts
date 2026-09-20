@@ -33,6 +33,8 @@ export type Result = {
   fields: FieldRow[]
   si_source: string | null
   bl_source: string | null
+  /** When a reply actually went out. Set, and it lives in Read. */
+  sent_at: string | null
 }
 
 export type Citation = {
@@ -216,6 +218,9 @@ export const api = {
   startRun: (options: { source: string; provider: string; labels: boolean }) =>
     call<Job>('/jobs/run', { method: 'POST', body: options }),
   job: (id: string) => call<Job>(`/jobs/${id}`),
+  // Work outlives the tab that started it, so a reloaded page adopts
+  // whatever is still in flight rather than showing an idle screen.
+  runningJobs: () => call<{ jobs: Job[] }>('/jobs/running'),
   gmailStatus: () => call<GmailStatus>('/gmail/status'),
   // Returns where to send the browser. The callback Google redirects to is
   // the one route with no token on it, so starting here is what authorises

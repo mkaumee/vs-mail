@@ -79,3 +79,22 @@ def test_reset_only_looks_at_seeded_messages(bundle):
     gmail = FakeGmail({"M1": {"id": "M1"}})
     seeding.reset(gmail)
     assert any(SEED_LABEL in q for q in gmail.queries)
+
+
+def test_progress_is_reported_as_it_goes(bundle):
+    """Not just at the end.
+
+    job.done used to be set once, after the whole minute of inserting had
+    finished, so the page showed '0 of 520' throughout and then jumped —
+    which reads as hung rather than working.
+    """
+    seen = []
+    gmail = FakeGmail()
+    seeding.seed(gmail, bundle, limit=5, on_progress=lambda done, total: seen.append((done, total)))
+
+    assert seen == [(1, 5), (2, 5), (3, 5), (4, 5), (5, 5)]
+
+
+def test_seeding_without_a_callback_still_works(bundle):
+    """Scripts pass none, and the route is the only caller that wants one."""
+    assert seeding.seed(FakeGmail(), bundle, limit=2)["inserted"] == 2

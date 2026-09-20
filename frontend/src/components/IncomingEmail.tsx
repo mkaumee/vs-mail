@@ -26,7 +26,7 @@ export default function IncomingEmail({ email }: { email: Email }) {
   return (
     <Card>
       <CardHeader className="gap-1">
-        <CardTitle className="text-sm">The email</CardTitle>
+        <CardTitle className="text-sm">Email</CardTitle>
         <p className="text-sm text-muted-foreground">{email.sender}</p>
       </CardHeader>
       <CardContent className="space-y-3">

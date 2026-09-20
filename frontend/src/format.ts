@@ -6,6 +6,8 @@ export const CATEGORY_LABELS: Record<string, string> = {
   INVOICE_QUERY: 'Invoice queries',
   GENERAL: 'General',
   SPAM: 'Spam',
+  // Replied to. Out of the queue, kept for looking back at.
+  READ: 'Read',
 }
 
 // What a wrong value actually costs. Consignee and notify party carry legal

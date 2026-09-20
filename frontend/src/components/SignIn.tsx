@@ -40,8 +40,7 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
         <CardHeader>
           <CardTitle>VS-Mail</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Reads an inbox of shipping mail, checks each draft bill of lading
-            against its shipping instruction, and drafts the reply.
+            Shipping document checks
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -60,10 +59,7 @@ export default function SignIn({ onDone }: { onDone: () => void }) {
             </button>
           ) : (
             <div className="space-y-2 border-t pt-3">
-              <p className="text-xs text-muted-foreground">
-                The shared secret the server was started with, for when the
-                Google path is unavailable.
-              </p>
+
               <div className="flex gap-2">
                 <input
                   type="password"

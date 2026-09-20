@@ -1,16 +1,14 @@
 import { useEffect, useState } from 'react'
-import { api, type GmailStatus, type Job, type Stats } from '@/api'
+import { api, type GmailStatus, type Job } from '@/api'
 import { Button } from '@/components/ui/button'
 
 // Seeding and running take minutes, so they return a job and the bar polls
 // it. Nobody should need a terminal open during a demo.
 export default function Controls({
-  stats,
   gmail,
   onChanged,
   onError,
 }: {
-  stats: Stats | undefined
   gmail: GmailStatus | null
   onChanged: () => void
   onError: (message: string) => void
@@ -20,9 +18,31 @@ export default function Controls({
   const [source, setSource] = useState('bundle')
   const [provider, setProvider] = useState('mock')
 
+  // Adopt whatever is already running. Work lives in the server process and
+  // outlives the tab, so a reload used to leave the screen idle while a seed
+  // carried on filling the mailbox behind it.
+  useEffect(() => {
+    api
+      .runningJobs()
+      .then(({ jobs }) => {
+        if (jobs.length) setJob(jobs[0])
+      })
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     api.watchStatus().then((s) => setWatching(s.watching)).catch(() => {})
   }, [])
+
+  // Watching is the normal state, not something to remember to switch on: a
+  // mailbox nobody is reading is the thing this is meant to prevent.
+  useEffect(() => {
+    if (!gmail?.ready || watching) return
+    api
+      .startWatch({ provider, interval: 10 })
+      .then(() => setWatching(true))
+      .catch(() => {})
+  }, [gmail?.ready, watching, provider])
 
   // While something is running, poll it; when it finishes, refresh the inbox.
   useEffect(() => {
@@ -63,7 +83,6 @@ export default function Controls({
   }
 
   const busy = job?.state === 'running'
-  const progress = busy && job.total ? ` ${job.done}/${job.total}` : ''
   const select =
     'h-9 rounded-md border bg-background px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50'
 
@@ -99,7 +118,7 @@ export default function Controls({
           start(() => api.startRun({ source, provider, labels: source === 'gmail' }))
         }
       >
-        {busy && job.kind === 'run' ? `Processing${progress}` : 'Process inbox'}
+        {busy && job.kind === 'run' ? `Processing ${job.done}/${job.total}` : 'Process inbox'}
       </Button>
 
       {gmail?.ready && (
@@ -110,10 +129,10 @@ export default function Controls({
             disabled={busy}
             onClick={() => start(() => api.seed())}
           >
-            {busy && job.kind === 'seed' ? `Seeding${progress}` : 'Seed Gmail'}
+            {busy && job.kind === 'seed' ? `Seeding ${job.done}/${job.total}` : 'Seed Gmail'}
           </Button>
           <Button variant={watching ? 'secondary' : 'outline'} onClick={toggleWatch}>
-            {watching ? '● Watching — stop' : 'Watch for new mail'}
+            {watching ? '● Watching' : 'Watch'}
           </Button>
         </>
       )}
@@ -130,11 +149,6 @@ export default function Controls({
       </Button>
 
       {busy && <span className="text-xs text-muted-foreground">{job.message}</span>}
-      {stats?.ran_at && !busy && (
-        <span className="text-xs text-muted-foreground">
-          {stats.source} · {stats.total} emails
-        </span>
-      )}
     </div>
   )
 }

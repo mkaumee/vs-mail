@@ -5,6 +5,7 @@ import type { Edit } from '@/useDrafts'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { relative } from '@/format'
 
 const KIND_LABEL: Record<string, string> = {
   mismatch: 'Asks for the draft to be amended',
@@ -49,6 +50,8 @@ export default function ReplyComposer({
   edited,
   onChange,
   onReset,
+  onSent,
+  sentAt,
   onError,
 }: {
   emailId: string
@@ -57,6 +60,10 @@ export default function ReplyComposer({
   edited: boolean
   onChange: (next: Edit) => void
   onReset: () => void
+  /** Told after a real send, so the lane can drop this one into Read. */
+  onSent?: () => void
+  /** When this was already sent. Set, and Send is not offered again. */
+  sentAt?: string | null
   onError: (message: string) => void
 }) {
   const { to, subject, body } = value
@@ -112,6 +119,7 @@ export default function ReplyComposer({
         test_recipient: testTo.trim(),
       })
       setSent(r)
+      onSent?.()
     } catch (error) {
       onError((error as Error).message)
     } finally {
@@ -131,8 +139,7 @@ export default function ReplyComposer({
           )}
         </CardTitle>
         <p className="text-sm text-muted-foreground">
-          {KIND_LABEL[draft.kind] ?? 'Drafted for approval'}. Change anything
-          you like — what is here is what gets sent.
+          {KIND_LABEL[draft.kind] ?? 'Drafted for approval'}
         </p>
       </CardHeader>
 
@@ -141,9 +148,7 @@ export default function ReplyComposer({
           <div className="flex items-start gap-2 rounded-md bg-review-bg px-3 py-2 text-xs text-review">
             <FlaskConical className="mt-0.5 size-3.5 shrink-0" />
             <span>
-              This answer uses <b>demo records</b>. The invoice and booking
-              numbers are real, the amounts and statuses were generated for this
-              project — check them before sending.
+              Uses <b>demo records</b> — check the figures before sending.
             </span>
           </div>
         )}
@@ -200,8 +205,9 @@ export default function ReplyComposer({
           </div>
         )}
 
-        {/* The guard is the server's; this only explains it. A send with no
-            test address is refused there, so a stale tab cannot get around it. */}
+        {/* Already answered. Offering Send again would send the customer a
+            second copy of the same correction. */}
+        {!sentAt && (
         <div className="rounded-md border border-dashed p-3">
           <label className="block">
             <span className="mb-1 block text-xs font-medium">
@@ -216,29 +222,26 @@ export default function ReplyComposer({
           </label>
           <p className="mt-1.5 text-xs text-muted-foreground">
             {testTo.trim() ? (
-              <>
-                Every send goes here instead of to <b>{to}</b>, and says so in
-                the message.
-              </>
+              <>Sends here instead of <b>{to}</b>.</>
             ) : (
-              <>
-                Set this before sending. Without it the reply would go to{' '}
-                <b>{to}</b>, which may be a real freight desk.
-              </>
+              <>Required. Otherwise this would go to <b>{to}</b>.</>
             )}
           </p>
         </div>
+        )}
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            loading={sending}
-            disabled={!testTo.trim() || !body.trim()}
-            onClick={send}
-          >
-            <Send />
-            Send
-          </Button>
+          {!sentAt && (
+            <Button
+              size="sm"
+              loading={sending}
+              disabled={!testTo.trim() || !body.trim()}
+              onClick={send}
+            >
+              <Send />
+              Send
+            </Button>
+          )}
           <Button size="sm" variant="outline" onClick={copy}>
             {copied ? <Check className="text-clean" /> : <Copy />}
             {copied ? 'Copied' : 'Copy'}
@@ -255,6 +258,9 @@ export default function ReplyComposer({
           )}
         </div>
 
+        {sentAt && (
+          <p className="text-xs text-clean">Sent {relative(sentAt)}</p>
+        )}
         {saved && <p className="text-xs text-clean">{saved}</p>}
         {sent && (
           <p className="text-xs text-clean">

@@ -20,7 +20,7 @@ function describe(gmail: GmailStatus) {
       icon: Check,
       tone: 'text-clean',
       title: gmail.mailbox ?? 'Connected',
-      detail: `Reading the whole mailbox, Spam included · token from ${gmail.token_source}`,
+      detail: null,
       action: null,
     }
   }
@@ -32,8 +32,7 @@ function describe(gmail: GmailStatus) {
       // Worth saying plainly: gmail.modify is a restricted scope, so a consent
       // screen in Testing issues tokens that last seven days. Reconnecting is
       // the arrangement, not a fault to investigate.
-      detail:
-        'Consent screens in Testing issue tokens that last seven days, so this is expected. Reconnect to carry on.',
+      detail: 'Tokens last seven days. Reconnect to carry on.',
       action: 'Reconnect Gmail',
     }
   }
@@ -41,8 +40,8 @@ function describe(gmail: GmailStatus) {
     return {
       icon: AlertTriangle,
       tone: 'text-defect',
-      title: `The OAuth client in the ${gmail.credentials_source} cannot be read`,
-      detail: gmail.error ?? 'It is set, but it is not valid JSON.',
+      title: 'Cannot read the OAuth client',
+      detail: 'The OAuth client cannot be read.',
       action: 'Try anyway',
     }
   }
@@ -51,7 +50,7 @@ function describe(gmail: GmailStatus) {
       icon: Mail,
       tone: 'text-muted-foreground',
       title: 'Gmail is not set up',
-      detail: 'No OAuth client found. Press connect for the setup steps.',
+      detail: null,
       action: 'Connect Gmail',
     }
   }
@@ -59,7 +58,7 @@ function describe(gmail: GmailStatus) {
     icon: Mail,
     tone: 'text-muted-foreground',
     title: 'Not connected',
-    detail: `OAuth client loaded from the ${gmail.credentials_source}. One consent screen to go.`,
+    detail: null,
     action: 'Connect Gmail',
   }
 }
@@ -100,8 +99,8 @@ export default function GmailCard({
       const result = await api.disconnectGmail()
       setDropped(
         result.still_in_environment
-          ? 'Revoked at Google, but VS_GMAIL_TOKEN_JSON still holds it — remove that variable.'
-          : 'Disconnected and revoked at Google.',
+          ? 'Revoked. Remove VS_GMAIL_TOKEN_JSON to finish.'
+          : 'Disconnected.',
       )
       onChanged()
     } catch (error) {
@@ -117,9 +116,9 @@ export default function GmailCard({
         <Icon className={`mt-0.5 size-4 shrink-0 ${state.tone}`} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium">{state.title}</div>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {state.detail}
-          </p>
+          {state.detail && (
+            <p className="mt-1 text-xs text-muted-foreground">{state.detail}</p>
+          )}
           <div className="mt-3 flex flex-wrap gap-2">
             {state.action && (
               <Button size="sm" variant="outline" loading={going} onClick={connect}>

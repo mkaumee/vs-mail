@@ -36,7 +36,16 @@ export const LOOKAHEAD = 1
  */
 function usePrefetch<T>(
   laneKey: string,
-  ids: React.MutableRefObject<string[]>,
+  /**
+   * The ids in view order. Must be stable between renders — memoise it — or
+   * this asks again on every render.
+   *
+   * It is the array itself rather than a ref, and that is the whole point:
+   * the deck now mounts before the inbox has loaded, so the first run sees
+   * an empty list. A ref never changes identity, so the effect would not run
+   * again when the rows arrived and nothing was ever fetched.
+   */
+  order: string[],
   index: number,
   fetcher: (id: string) => Promise<T>,
 ) {
@@ -59,7 +68,7 @@ function usePrefetch<T>(
   }, [])
 
   useEffect(() => {
-    const wanted = ids.current.slice(index, index + 1 + LOOKAHEAD)
+    const wanted = order.slice(index, index + 1 + LOOKAHEAD)
     for (const id of wanted) {
       if (!id || requested.current.has(id)) continue
       requested.current.add(id)
@@ -78,7 +87,7 @@ function usePrefetch<T>(
           requested.current.delete(id)
         })
     }
-  }, [laneKey, index, nonce, fetcher, ids])
+  }, [laneKey, index, nonce, fetcher, order])
 
   const retry = useCallback((id: string) => {
     requested.current.delete(id)
@@ -119,11 +128,11 @@ export function useDeck(
     setIndex(0)
   }, [laneKey])
 
-  const replies = usePrefetch<ReplyResponse>(laneKey, ids, index, fetchReply)
+  const replies = usePrefetch<ReplyResponse>(laneKey, order, index, fetchReply)
   // The same window, but a file read rather than a model call — so it lands
   // first and the email is on screen while its reply is still being drafted,
   // which is the order you would want to read them in anyway.
-  const emails = usePrefetch<IncomingEmail>(laneKey, ids, index, fetchEmail)
+  const emails = usePrefetch<IncomingEmail>(laneKey, order, index, fetchEmail)
 
   const go = useCallback(
     (delta: number) =>

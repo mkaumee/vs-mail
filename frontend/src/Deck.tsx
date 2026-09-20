@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { api, type Result } from './api'
 import { Badge } from '@/components/ui/badge'
@@ -28,8 +28,18 @@ const versionOf = (row: Result) =>
  * email, approve or fix its reply, and move on. The deck makes that the shape
  * of the screen, and lets the next one be ready before it is asked for.
  */
-export default function Deck({ lane, rows }: { lane: string; rows: Result[] }) {
-  const order = rows.map((r) => r.email_id)
+export default function Deck({
+  lane,
+  rows,
+  onSent,
+}: {
+  lane: string
+  rows: Result[]
+  onSent: () => void
+}) {
+  // Memoised: usePrefetch depends on this array's identity, so a fresh
+  // one every render would re-run the window on every render.
+  const order = useMemo(() => rows.map((r) => r.email_id), [rows])
   const { index, go, retry, retryEmail, current, entry, email, total } = useDeck(
     lane,
     order,
@@ -167,6 +177,7 @@ export default function Deck({ lane, rows }: { lane: string; rows: Result[] }) {
             edited={drafts.isEdited(current, entry.value.draft, versionOf(row))}
             onChange={(next) => drafts.change(current, versionOf(row), next)}
             onReset={() => drafts.reset(current)}
+            onSent={onSent}
             onError={setError}
           />
         )}

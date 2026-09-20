@@ -62,7 +62,10 @@ export default function App() {
   const [lane, setLane] = useState('BL_COMPARISON')
   const [onlyFlagged, setOnlyFlagged] = useState(false)
   const [selected, setSelected] = useState<{ result: Result; case: Case | null } | null>(null)
-  const [view, setView] = useState<'list' | 'deck'>('list')
+  // Read is an archive you browse; everything else is a queue you work
+  // through. So the lane decides the layout and there is no toggle: one
+  // less thing on screen, and no way to end up in the wrong one.
+  const READ_LANE = 'READ'
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState(readOutcome)
 
@@ -179,7 +182,7 @@ export default function App() {
         </div>
 
         <div className="flex-1" />
-        <Controls stats={stats} gmail={gmail} onChanged={refreshBoth} onError={setError} />
+        <Controls gmail={gmail} onChanged={refreshBoth} onError={setError} />
 
         {/* Who is signed in, and the way out. Separate from the mailbox card
             below, which says which mailbox the app works on. */}
@@ -212,7 +215,7 @@ export default function App() {
 
       <div
         className={`grid min-h-0 flex-1 divide-x ${
-          view === 'deck' ? 'grid-cols-[15rem_1fr]' : 'grid-cols-[15rem_22rem_1fr]'
+          lane === READ_LANE ? 'grid-cols-[15rem_22rem_1fr]' : 'grid-cols-[15rem_1fr]'
         }`}
       >
         <nav className="flex flex-col gap-1 overflow-y-auto p-3">
@@ -221,7 +224,12 @@ export default function App() {
           </h3>
           {Object.entries(CATEGORY_LABELS).map(([key, label]) => {
             const items = data?.lanes?.[key] || []
-            const flagged = items.filter((r) => r.status !== 'OK').length
+            // Read is finished work. A red dot there reads as "needs
+            // attention" about something already dealt with.
+            const flagged =
+              key === READ_LANE
+                ? 0
+                : items.filter((r) => r.status !== 'OK').length
             return (
               <button
                 key={key}
@@ -256,19 +264,6 @@ export default function App() {
             Only ones needing attention
           </button>
 
-          <h3 className="mt-3 px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
-            View
-          </h3>
-          <button
-            className={`rounded-md px-2 py-1.5 text-left text-sm transition-colors ${
-              view === 'deck' ? 'bg-primary text-primary-foreground' : 'hover:bg-accent'
-            }`}
-            onClick={() => setView((v) => (v === 'deck' ? 'list' : 'deck'))}
-            title="One at a time, with the reply ready before you get there"
-          >
-            {view === 'deck' ? 'One at a time' : 'Work through them'}
-          </button>
-
           {gmail && (
             <div className="mt-3">
               <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -291,9 +286,11 @@ export default function App() {
           )}
         </nav>
 
-        {view === 'deck' && <Deck lane={lane} rows={rows} />}
+        {lane !== READ_LANE && (
+          <Deck lane={lane} rows={rows} onSent={refreshBoth} />
+        )}
 
-        {view === 'list' && (
+        {lane === READ_LANE && (
         <div className="min-h-0 overflow-y-auto">
           {!data && <SkeletonRows rows={6} className="p-3" />}
           {empty && (
@@ -336,7 +333,7 @@ export default function App() {
         </div>
         )}
 
-        {view === 'list' && (
+        {lane === READ_LANE && (
           <Detail email={selected} onChanged={refreshBoth} onError={setError} />
         )}
       </div>

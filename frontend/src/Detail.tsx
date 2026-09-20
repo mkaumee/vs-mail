@@ -51,8 +51,7 @@ function Resolve({
       <CardHeader>
         <CardTitle className="text-sm">Resolve</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Supply the correct value and the comparison runs again over it. The
-          verdict is never written by hand.
+          Supply the correct value and the check runs again.
         </p>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2">
@@ -188,6 +187,7 @@ export default function Detail({
       <ReplyCard
         emailId={result.email_id}
         version={`${result.status}:${result.defect_fields.join(',')}:${result.provenance.length}`}
+        sentAt={result.sent_at}
         onError={onError}
       />
 

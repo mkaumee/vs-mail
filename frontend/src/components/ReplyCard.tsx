@@ -18,10 +18,12 @@ import { useDrafts } from '@/useDrafts'
 export default function ReplyCard({
   emailId,
   version,
+  sentAt,
   onError,
 }: {
   emailId: string
   version: string
+  sentAt?: string | null
   onError: (message: string) => void
 }) {
   const drafts = useDrafts()
@@ -68,6 +70,7 @@ export default function ReplyCard({
     <ReplyComposer
       emailId={emailId}
       draft={reply.draft}
+      sentAt={sentAt}
       value={drafts.valueFor(emailId, reply.draft, version)}
       edited={drafts.isEdited(emailId, reply.draft, version)}
       onChange={(next) => drafts.change(emailId, version, next)}
