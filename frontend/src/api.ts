@@ -34,6 +34,8 @@ export type Result = {
   bl_source: string | null
 }
 
+export type Draft = { to: string; subject: string; body: string; kind: string }
+
 export type Audit = { at: string; by: string; action: string; detail: string }
 
 export type Case = {
@@ -132,4 +134,9 @@ export const api = {
   // run stored and supplying a value looks like it did nothing.
   recheck: (id: string) =>
     call<{ result: Result }>(`/inbox/${id}/recheck`, { method: 'POST' }),
+  reply: (id: string) => call<{ draft: Draft | null }>(`/inbox/${id}/reply`),
+  replyIntoGmail: (id: string) =>
+    call<{ draft: Draft; threaded: boolean }>(`/inbox/${id}/reply/gmail`, {
+      method: 'POST',
+    }),
 }

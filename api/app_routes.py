@@ -128,6 +128,54 @@ async def recheck(email_id: str) -> dict:
     return {"result": asdict(result)}
 
 
+@app_router.get("/inbox/{email_id}/reply")
+async def reply_draft(email_id: str) -> dict:
+    """The reply a checker would otherwise type, for them to approve.
+
+    Composed rather than generated: the values in a correction email are the
+    exact strings from the documents and carry legal weight, so nothing
+    paraphrases them.
+    """
+    from vsmail.reply import compose
+
+    result = _results().results.get(email_id)
+    if result is None:
+        raise HTTPException(404, detail=f"nothing recorded for {email_id}")
+    draft = compose(result)
+    if draft is None:
+        return {"draft": None, "why": "only comparison requests are replied to"}
+    return {"draft": draft.as_dict()}
+
+
+@app_router.post("/inbox/{email_id}/reply/gmail")
+async def reply_into_gmail(email_id: str) -> dict:
+    """Put that reply into Gmail as a draft, in the original thread.
+
+    A draft, never a send. The system proposes words; a person presses send.
+    """
+    from vsmail.gmail import drafts as gmail_drafts
+    from vsmail.gmail.client import NotAuthorised, service
+    from vsmail.reply import compose
+
+    result = _results().results.get(email_id)
+    if result is None:
+        raise HTTPException(404, detail=f"nothing recorded for {email_id}")
+    draft = compose(result)
+    if draft is None:
+        raise HTTPException(422, detail="there is no reply to write for this email")
+
+    try:
+        svc = service()
+    except NotAuthorised as exc:
+        raise HTTPException(400, detail=str(exc))
+
+    try:
+        created = gmail_drafts.create(svc, draft, result.gmail_message_id)
+    except Exception as exc:
+        raise HTTPException(502, detail=f"Gmail refused the draft: {exc}")
+    return {"draft": draft.as_dict(), **created}
+
+
 @app_router.get("/stats")
 async def stats() -> dict:
     return _results().stats()

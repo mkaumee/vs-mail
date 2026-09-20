@@ -271,6 +271,46 @@ filter misfiles something, that is exactly the email an ops desk still has to
 deal with, and a system whose job includes recognising spam should be looking
 where spam actually lands.
 
+## The reply
+
+What actually happens when a check finds something is an email. The bundle
+says so itself — "kindly verify the BL matches the SI **before we release to
+the line**", "revert with any discrepancy asap". The document under check is a
+*draft*. Nobody here redrafts a bill of lading; they reply saying what is
+wrong, and the carrier corrects its own draft.
+
+So the app drafts that reply. It quotes both documents verbatim, asks for an
+amendment, and waits for a person to approve it:
+
+```
+Dear Team,
+
+Thank you for the draft bill of lading. Checking it against the shipping
+instruction, the following do not agree:
+
+  Consignee
+    SI: "EAST BRIGHT FZ-LLC"
+    Draft BL: "UAB NOVAKOPA"
+
+Kindly amend the draft and resend for confirmation. The remaining fields match.
+```
+
+**Composed in code, not written by the model.** The sentences are identical
+every time; only the values change, and those are exact strings from the
+documents that carry legal weight. A model asked to write this email would be
+retyping a consignee name — a transcription risk with no upside. The model
+reads documents; the template writes prose.
+
+**A clean check gets a reply too.** The draft is held until someone confirms
+it, so silence is what stalls a shipment. The one exception is a clean check
+that recorded doubt — where two readings disagreed, or the model disputed an
+equivalence. Those are not offered for approval, because a confirmation that
+suppresses the doubt would sound more certain to the customer than the run was
+to itself.
+
+**Nothing is sent.** Copy it, or press *Create Gmail draft* to put it in the
+original thread unsent. The send is always a person's.
+
 ## Human review
 
 The pipeline escalates what it cannot settle. This is where a person settles it.

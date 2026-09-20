@@ -50,6 +50,7 @@ class FakeGmail:
         self.label_calls: list[tuple[str, list[str]]] = []
         self.inserted: list[dict] = []
         self.sent: list[dict] = []
+        self.drafts_created: list[dict] = []
         self.deleted: list[str] = []
         self.labels: dict[str, str] = {}
         self.queries: list[str] = []
@@ -72,8 +73,20 @@ class _Users:
     def messages(self):
         return _Messages(self.gmail)
 
+    def drafts(self):
+        return _Drafts(self.gmail)
+
     def labels(self):
         return _Labels(self.gmail)
+
+
+class _Drafts:
+    def __init__(self, gmail: "FakeGmail"):
+        self.gmail = gmail
+
+    def create(self, userId, body):
+        self.gmail.drafts_created.append(body)
+        return _Result({"id": f"draft{len(self.gmail.drafts_created)}"})
 
 
 class _Result:
@@ -92,7 +105,7 @@ class _Messages:
         self.gmail.queries.append(q or "")
         return _Result({"messages": [{"id": k} for k in self.gmail.store]})
 
-    def get(self, userId, id, format=None):
+    def get(self, userId, id, format=None, metadataHeaders=None):
         return _Result(self.gmail.store[id])
 
     def insert(self, userId, body, internalDateSource=None):

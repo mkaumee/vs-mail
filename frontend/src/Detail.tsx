@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import ReplyCard from '@/components/ReplyCard'
 import { FIELD_LABELS, REVIEW_REASONS, TONE_CLASS, statusTone } from './format'
 
 const FIELDS = Object.keys(FIELD_LABELS)
@@ -241,6 +242,8 @@ export default function Detail({
         (result.status !== 'OK' || corrected) && (
           <Resolve result={result} onDone={onChanged} onError={onError} />
         )}
+
+      <ReplyCard emailId={result.email_id} onError={onError} />
 
       {reviewCase?.audit && reviewCase.audit.length > 0 && (
         <Card>

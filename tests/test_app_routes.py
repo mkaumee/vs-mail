@@ -165,3 +165,37 @@ def test_a_recheck_does_not_pretend_the_whole_inbox_was_rerun(client, auth):
     after = client.get("/stats", headers=auth).json()
     assert after["ran_at"] == before["ran_at"]
     assert after["total"] == before["total"]
+
+
+# -- the drafted reply ----------------------------------------------------
+def test_a_comparison_gets_a_drafted_reply(client, auth):
+    body = client.get("/inbox/email_004/reply", headers=auth).json()
+    draft = body["draft"]
+    assert draft["kind"] == "mismatch"
+    assert draft["to"] == "docs@vitalsolutions.sg"
+    assert draft["subject"].startswith("RE: ")
+    assert "Kindly amend the draft" in draft["body"]
+
+
+def test_nothing_is_drafted_for_a_non_comparison(client, auth):
+    body = client.get("/inbox/email_002/reply", headers=auth).json()
+    assert body["draft"] is None
+    assert "why" in body
+
+
+def test_a_reply_for_an_unknown_email_is_a_404(client, auth):
+    assert client.get("/inbox/nope/reply", headers=auth).status_code == 404
+
+
+def test_writing_into_gmail_without_a_mailbox_explains_itself(client, auth, monkeypatch, tmp_path):
+    """A 400 naming the setup step, not a 500."""
+    from vsmail.gmail import client as gmail_client
+
+    monkeypatch.delenv(gmail_client.TOKEN_ENV, raising=False)
+    monkeypatch.delenv(gmail_client.CREDENTIALS_ENV, raising=False)
+    monkeypatch.setattr(gmail_client, "CREDENTIALS", tmp_path / "nope.json")
+    monkeypatch.setattr(gmail_client, "TOKEN", tmp_path / "nope-token.json")
+
+    response = client.post("/inbox/email_004/reply/gmail", headers=auth)
+    assert response.status_code == 400
+    assert "Connect Gmail" in response.json()["detail"]
