@@ -1,0 +1,115 @@
+/* Settings and the Gmail connection screen, ported from the prototype. */
+
+.panel { padding: 20px; display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+
+.h2 { font-size: var(--fs-h2); font-weight: 600; letter-spacing: -0.012em; line-height: 1.25; }
+.h3 { font-size: var(--fs-h3); font-weight: 600; letter-spacing: -0.004em; }
+.label { font-size: var(--fs-sm); font-weight: 600; color: var(--ink); display: flex; align-items: baseline; gap: 6px; }
+.hint { font-size: 12px; color: var(--ink-2); }
+.muted { color: var(--ink-2); }
+.small { font-size: var(--fs-sm); }
+
+/* Definition rows: a label column and a value column, hairline between. */
+.kv > div {
+  display: grid; grid-template-columns: 160px minmax(0, 1fr);
+  gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: baseline;
+}
+.kv > div:last-child { border-bottom: 0; }
+.kv dt { color: var(--ink-2); font-size: var(--fs-sm); }
+.kv dd { overflow-wrap: anywhere; margin: 0; }
+
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-3); margin-right: 6px; }
+.dot--ok { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-bg); }
+.dot--warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); }
+
+/* -- settings ---------------------------------------------------------- */
+.settings { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 900px) { .settings { grid-template-columns: 210px minmax(0, 1fr); } }
+
+.settings__nav { display: flex; gap: 4px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+@media (min-width: 900px) { .settings__nav { flex-direction: column; overflow: visible; } }
+.settings__nav::-webkit-scrollbar { display: none; }
+.settings__link {
+  display: inline-flex; align-items: center; gap: 10px; height: 38px; padding: 0 14px;
+  border-radius: var(--r-md); color: var(--ink-2); font-weight: 550; white-space: nowrap;
+  border: 1px solid transparent;
+  transition: background-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard);
+}
+.settings__link:hover { background: var(--gold-soft); color: var(--ink); }
+.settings__link.is-on {
+  background: color-mix(in srgb, var(--gold) 22%, transparent);
+  border-color: var(--gold-border); color: var(--ink);
+}
+.settings__body { padding: 26px; gap: 22px; }
+
+/* -- theme picker ------------------------------------------------------ */
+.theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 8px; }
+.theme-card {
+  display: flex; flex-direction: column; gap: 10px; padding: 10px;
+  border-radius: 16px; border: 1px solid var(--line-strong);
+  background: var(--paper-card); text-align: left;
+  transition: border-color var(--motion-fast) var(--ease-standard),
+    box-shadow var(--motion-fast) var(--ease-standard);
+}
+.theme-card:hover { border-color: var(--gold-border); }
+.theme-card.is-on {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gold) 22%, transparent);
+}
+.theme-card__label { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; padding: 0 4px 2px; }
+
+/* A miniature of the app: rail, header, content. The swatch colours are
+   literal, not themed — the point is to show what each mode looks like
+   while you are in a different one. */
+.theme-card__swatch {
+  display: grid; grid-template-columns: 26% 1fr; grid-template-rows: 1fr 1fr;
+  gap: 4px; height: 74px; padding: 6px; border-radius: 10px;
+  background: var(--sw-bg); border: 1px solid var(--sw-line);
+}
+.theme-card__swatch i { border-radius: 5px; background: var(--sw-card); border: 1px solid var(--sw-line); }
+.theme-card__swatch i:first-child { grid-row: span 2; }
+.theme-card__swatch i:last-child { background: color-mix(in srgb, var(--sw-accent) 35%, var(--sw-card)); }
+
+.theme-card__swatch--light { --sw-bg: #FAF6F0; --sw-card: #FFFCF7; --sw-line: #E6DBCB; --sw-accent: #B98245; }
+.theme-card__swatch--dark  { --sw-bg: #1E1915; --sw-card: #2A231D; --sw-line: #3A2F27; --sw-accent: #C79C68; }
+.theme-card__swatch--system {
+  background: linear-gradient(115deg, #FAF6F0 50%, #1E1915 50%);
+  border-color: #E6DBCB;
+}
+.theme-card__swatch--system i {
+  background: linear-gradient(115deg, #FFFCF7 50%, #2A231D 50%);
+  border-color: #E6DBCB;
+}
+
+/* -- gmail ------------------------------------------------------------- */
+.gmail-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (min-width: 1000px) {
+  .gmail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .gmail-grid > .gcard { grid-column: 1 / -1; }
+}
+.gcard { padding: 26px; gap: 18px; }
+.gcard__top { display: flex; align-items: center; gap: 16px; }
+.gcard__icon {
+  display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px;
+  background: color-mix(in srgb, var(--ink-2) 10%, transparent); color: var(--ink-2);
+}
+.gcard--ok   .gcard__icon { background: var(--ok-bg);   color: var(--ok-fg); }
+.gcard--warn .gcard__icon { background: var(--warn-bg); color: var(--warn-fg); }
+.gcard--bad  .gcard__icon { background: var(--bad-bg);  color: var(--bad-fg); }
+.gcard__text { font-size: 15px; color: var(--ink-2); max-width: 52ch; }
+.gcard__actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.signin { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.signin > div { display: flex; flex-direction: column; flex: 1; min-width: 160px; }
+.signin__avatar {
+  display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%;
+  background: color-mix(in srgb, var(--gold) 22%, transparent); color: var(--gold);
+}
+
+.checks { display: flex; flex-direction: column; gap: 9px; font-size: 13.5px; }
+.checks li { display: flex; align-items: flex-start; gap: 9px; }
+.checks li svg { margin-top: 2px; flex-shrink: 0; color: var(--ok-fg); }
+.checks li.is-off svg { color: var(--warn-fg); }
+.checks li.is-no svg { color: var(--ink-3); }

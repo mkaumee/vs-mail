@@ -1,6 +1,7 @@
 import { motion } from 'motion/react'
 import {
-  CheckCircle2, FileCheck2, Inbox, Mail, MailOpen, ShieldAlert,
+  CheckCircle2, FileCheck2, Inbox, Mail, MailOpen, Plug, Settings as Cog,
+  ShieldAlert,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import type { Inbox as InboxData } from '@/api'
@@ -25,12 +26,16 @@ const GROUPS: { label: string; lanes: string[] }[] = [
 export default function Sidebar({
   data,
   lane,
+  view,
   onLane,
+  onView,
   children,
 }: {
   data: InboxData | null
   lane: string
+  view: 'lanes' | 'settings' | 'gmail'
   onLane: (lane: string) => void
+  onView: (view: 'lanes' | 'settings' | 'gmail') => void
   /** The mailbox card and the run line, which belong at the bottom. */
   children?: React.ReactNode
 }) {
@@ -56,7 +61,7 @@ export default function Sidebar({
               const flagged =
                 key === 'READ' ? 0 : items.filter((r) => r.status !== 'OK').length
               const Icon = ICONS[key] ?? Mail
-              const active = lane === key
+              const active = view === 'lanes' && lane === key
               return (
                 <motion.button
                   key={key}
@@ -77,6 +82,27 @@ export default function Sidebar({
             })}
           </div>
         ))}
+        {/* The mailbox and the preferences. Not lanes, so they sit apart. */}
+        <div className="nav__group">
+          <div className="nav__label-group">System</div>
+          {([
+            { id: 'gmail' as const, label: 'Gmail', Icon: Plug },
+            { id: 'settings' as const, label: 'Settings', Icon: Cog },
+          ]).map(({ id, label, Icon }) => (
+            <motion.button
+              key={id}
+              type="button"
+              className={`nav__item${view === id ? ' is-active' : ''}`}
+              onClick={() => onView(id)}
+              whileHover={{ x: 2 }}
+              whileTap={{ scale: 0.985 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 32 }}
+            >
+              <Icon className="nav__icon size-4" />
+              <span className="nav__label">{label}</span>
+            </motion.button>
+          ))}
+        </div>
       </div>
 
       {children && <div className="sidebar__foot">{children}</div>}

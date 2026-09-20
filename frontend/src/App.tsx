@@ -4,9 +4,11 @@ import { CircleHelp, Clock, Filter, Mail, TriangleAlert } from 'lucide-react'
 import Controls from './Controls'
 import Deck from './Deck'
 import Detail from './Detail'
-import GmailCard from '@/components/GmailCard'
 import SignIn from '@/components/SignIn'
+import SettingsPage from '@/pages/SettingsPage'
+import GmailPage from '@/pages/GmailPage'
 import Sidebar from '@/components/layout/Sidebar'
+import { useRoute } from './useRoute'
 import TopBar from '@/components/layout/TopBar'
 import StatCard from '@/components/layout/StatCard'
 import {
@@ -75,6 +77,7 @@ export default function App() {
   const READ_LANE = 'READ'
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState(readOutcome)
+  const { view, go } = useRoute()
 
   const load = useCallback(async () => {
     try {
@@ -178,37 +181,37 @@ export default function App() {
       <Sidebar
         data={data}
         lane={lane}
+        view={view}
         onLane={(next) => {
           setLane(next)
           setSelected(null)
+          go('lanes')
         }}
+        onView={go}
       >
-        {gmail && (
-          <GmailCard
-            gmail={gmail}
-            onChanged={() =>
-              api.gmailStatus().then(setGmail).catch(() => setGmail(null))
-            }
-            onError={setError}
-          />
-        )}
-        {stats?.ran_at && (
-          <div className="mt-3">Last run {relative(stats.ran_at)} · {stats.source}</div>
+        {/* The mailbox has its own screen now, and the top-bar chip says
+            its state. A third copy down here was two too many. */}
+        {stats?.ran_at ? (
+          <div>Last run {relative(stats.ran_at)} · {stats.source}</div>
+        ) : (
+          <div>Nothing processed yet.</div>
         )}
       </Sidebar>
 
       <div className="app__main">
         <TopBar
-          title={laneLabel}
-          crumb={laneGroup}
+          title={view === 'lanes' ? laneLabel : view === 'gmail' ? 'Gmail' : 'Settings'}
+          crumb={view === 'lanes' ? laneGroup : 'System'}
           gmail={gmail}
           me={me}
           stats={stats}
+          onGmail={() => go('gmail')}
           onSignOut={signOut}
         />
 
         <main className="app__content">
           <div className="page">
+            {view === 'lanes' ? (
             <div className="page-head">
               <div className="page-head__row">
                 <div className="min-w-0 flex-1">
@@ -241,7 +244,18 @@ export default function App() {
                 </div>
               </div>
             </div>
+            ) : (
+              <div className="page-head">
+                <h1>{view === 'gmail' ? 'Gmail' : 'Settings'}</h1>
+                <p className="page-head__sub">
+                  {view === 'gmail'
+                    ? 'Your mailbox connection. It is separate from signing in to VS-Mail.'
+                    : 'Preferences are kept in this browser. Credentials never are.'}
+                </p>
+              </div>
+            )}
 
+            {view === 'lanes' && (
             <div className="stat-grid">
               <StatCard label="Emails" value={stats?.total} hint="processed" icon={Mail} delay={0} />
               <StatCard label="With errors" value={stats?.defects_found} hint="fields disagree" icon={TriangleAlert} tone="bad" delay={0.05} />
@@ -255,6 +269,7 @@ export default function App() {
                 delay={0.15}
               />
             </div>
+            )}
 
             {error && (
               <div className="mb-4 rounded-md bg-defect-bg px-3 py-2 text-sm text-defect">
@@ -270,6 +285,22 @@ export default function App() {
               </button>
             )}
 
+            {view === 'settings' && (
+              <SettingsPage gmail={gmail} onManageGmail={() => go('gmail')} />
+            )}
+
+            {view === 'gmail' && (
+              <GmailPage
+                gmail={gmail}
+                me={me}
+                onChanged={() =>
+                  api.gmailStatus().then(setGmail).catch(() => setGmail(null))
+                }
+                onError={setError}
+              />
+            )}
+
+            {view === 'lanes' && (
             <AnimatePresence mode="wait">
               <motion.div
                 key={lane}
@@ -294,6 +325,7 @@ export default function App() {
                 )}
               </motion.div>
             </AnimatePresence>
+            )}
           </div>
         </main>
       </div>

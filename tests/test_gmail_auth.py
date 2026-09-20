@@ -270,7 +270,9 @@ def test_an_unknown_state_is_refused(client, monkeypatch):
     response = client.get(
         "/gmail/auth/callback?code=c&state=forged", follow_redirects=False
     )
-    assert response.headers["location"] == "/?gmail=expired"
+    assert response.headers["location"].startswith("/?gmail=expired")
+    # Consent leaves the app, so the callback says which screen to return to.
+    assert response.headers["location"].endswith("#/gmail")
     assert called == []
 
 
@@ -284,7 +286,8 @@ def test_a_state_from_a_real_start_completes(client, auth, monkeypatch):
     response = client.get(
         "/gmail/auth/callback?code=the-code&state=s1", follow_redirects=False
     )
-    assert response.headers["location"] == "/?gmail=connected"
+    assert response.headers["location"].startswith("/?gmail=connected")
+    assert response.headers["location"].endswith("#/gmail")
     # The PKCE verifier has to survive from the start route to here. It is
     # generated when the authorisation URL is built and the exchange happens
     # on a different Flow in a different request, so dropping it fails every
@@ -318,8 +321,8 @@ def test_a_state_is_single_use(client, auth, monkeypatch):
 
     first = client.get("/gmail/auth/callback?code=c&state=s1", follow_redirects=False)
     second = client.get("/gmail/auth/callback?code=c&state=s1", follow_redirects=False)
-    assert first.headers["location"] == "/?gmail=connected"
-    assert second.headers["location"] == "/?gmail=expired"
+    assert first.headers["location"].startswith("/?gmail=connected")
+    assert second.headers["location"].startswith("/?gmail=expired")
 
 
 def test_a_stale_state_is_refused(client, auth, monkeypatch):
@@ -330,7 +333,9 @@ def test_a_stale_state_is_refused(client, auth, monkeypatch):
 
     monkeypatch.setattr(gmail, "exchange", lambda *a: None)
     response = client.get("/gmail/auth/callback?code=c&state=s1", follow_redirects=False)
-    assert response.headers["location"] == "/?gmail=expired"
+    assert response.headers["location"].startswith("/?gmail=expired")
+    # Consent leaves the app, so the callback says which screen to return to.
+    assert response.headers["location"].endswith("#/gmail")
 
 
 def test_a_refusal_on_the_consent_screen_is_reported(client):
@@ -350,4 +355,4 @@ def test_a_failed_exchange_does_not_leak_the_reason(client, auth, monkeypatch):
 
     monkeypatch.setattr(gmail, "exchange", boom)
     response = client.get("/gmail/auth/callback?code=c&state=s1", follow_redirects=False)
-    assert response.headers["location"] == "/?gmail=failed"
+    assert response.headers["location"].startswith("/?gmail=failed")

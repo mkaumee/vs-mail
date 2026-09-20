@@ -19,6 +19,7 @@ export default function TopBar({
   gmail,
   me,
   stats,
+  onGmail,
   onSignOut,
 }: {
   title: string
@@ -26,6 +27,7 @@ export default function TopBar({
   gmail: GmailStatus | null
   me: Me | null
   stats: Stats | undefined
+  onGmail: () => void
   onSignOut: () => void
 }) {
   const chip = gmailChip(gmail)
@@ -42,10 +44,19 @@ export default function TopBar({
       </div>
 
       <div className="topbar__actions">
-        <span className={`chip glass-4 ${chip.tone}`} title={chip.text}>
+        {/* The state, and the way to do something about it. */}
+        <motion.button
+          type="button"
+          className={`chip glass-4 ${chip.tone}`}
+          title={`${chip.text} — manage`}
+          onClick={onGmail}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 26 }}
+        >
           <span className="chip__dot" />
           <span className="hidden max-w-44 truncate lg:inline">{chip.text}</span>
-        </span>
+        </motion.button>
 
         {stats?.source && (
           <span className="mode-tag hidden xl:inline">

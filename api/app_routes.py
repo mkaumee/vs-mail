@@ -500,13 +500,18 @@ async def gmail_auth_callback(
 
     The result is a redirect rather than JSON because a person is looking at
     it. The token itself is never rendered.
+
+    It lands back on #/gmail rather than the root: consent leaves the app
+    entirely, and returning somebody to the inbox after they pressed Connect
+    on the Gmail screen loses their place at the one moment they are looking
+    for confirmation.
     """
     import time
 
     from vsmail.gmail.client import NotAuthorised, exchange
 
     if error:
-        return RedirectResponse(f"/?gmail=denied&detail={error}")
+        return RedirectResponse(f"/?gmail=denied&detail={error}#/gmail")
 
     # Prune first, then look: otherwise the state being presented is popped
     # without its own age ever being checked, and an authorisation started
@@ -514,15 +519,15 @@ async def gmail_auth_callback(
     _drop_stale(time.time())
     pending = _PENDING.pop(state, None)
     if pending is None:
-        return RedirectResponse("/?gmail=expired")
+        return RedirectResponse("/?gmail=expired#/gmail")
 
     try:
         exchange(code, state, pending[1])
     except NotAuthorised as exc:
-        return RedirectResponse(f"/?gmail=denied&detail={exc}")
+        return RedirectResponse(f"/?gmail=denied&detail={exc}#/gmail")
     except Exception:
-        return RedirectResponse("/?gmail=failed")
-    return RedirectResponse("/?gmail=connected")
+        return RedirectResponse("/?gmail=failed#/gmail")
+    return RedirectResponse("/?gmail=connected#/gmail")
 
 
 @app_router.post("/gmail/seed")
