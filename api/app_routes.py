@@ -533,6 +533,18 @@ async def gmail_seed(payload: dict | None = None) -> dict:
     return JOBS.start("seed", work).as_dict()
 
 
+@app_router.post("/gmail/disconnect")
+async def gmail_disconnect() -> dict:
+    """Detach the mailbox, revoking the grant at Google.
+
+    Connect had no counterpart, so unhooking a mailbox meant editing a
+    Railway variable or waiting out the seven-day expiry.
+    """
+    from vsmail.gmail.client import forget
+
+    return forget()
+
+
 @app_router.post("/gmail/reset")
 async def gmail_reset(payload: dict | None = None) -> dict:
     """Bin the seeded messages, and optionally forget the run as well.

@@ -6,6 +6,7 @@ const TOKEN_KEY = 'vsmail.token'
 export const getToken = (): string => localStorage.getItem(TOKEN_KEY) || ''
 export const setToken = (value: string): void =>
   localStorage.setItem(TOKEN_KEY, value.trim())
+export const clearToken = (): void => localStorage.removeItem(TOKEN_KEY)
 
 export type FieldRow = {
   field: string
@@ -74,6 +75,21 @@ export type IncomingEmail = {
   bl_source: string | null
 }
 
+export type Me = { email: string; name: string; picture: string }
+
+export type AuthStatus = {
+  configured: boolean
+  redirect_uri: string
+  signed_in: boolean
+  token_accepted: boolean
+}
+
+export type Disconnected = {
+  revoked: boolean
+  file_removed: boolean
+  still_in_environment: boolean
+}
+
 export type Sent = {
   message_id: string
   sent_to: string
@@ -133,19 +149,50 @@ export type GmailStatus = {
   error?: string
 }
 
+/**
+ * Told when the server says we are not signed in, so the app can show the
+ * sign-in screen again.
+ *
+ * Without this a rejected credential was a dead end: `ready` was set once
+ * from whether a token existed and never went back, so rotating
+ * VS_SERVICE_TOKEN left the page rendering the shell with an error banner
+ * and no way back short of clearing localStorage by hand.
+ */
+let onRejected: () => void = () => {}
+export const whenRejected = (fn: () => void) => {
+  onRejected = fn
+}
+
+export class NotSignedIn extends Error {}
+
 async function call<T>(
   path: string,
-  { method = 'GET', body }: { method?: string; body?: unknown } = {},
+  {
+    method = 'GET',
+    body,
+    // A 401 from /auth/me is the answer to "am I signed in", not a failure —
+    // firing the rejected handler on it would bounce a token-only browser to
+    // the sign-in screen on every load.
+    quiet401 = false,
+  }: { method?: string; body?: unknown; quiet401?: boolean } = {},
 ): Promise<T> {
+  const token = getToken()
   const response = await fetch(path, {
     method,
+    // The session cookie is HttpOnly, so it only travels if we ask for it.
+    credentials: 'include',
     headers: {
-      'X-VS-Token': getToken(),
+      // Still sent when one is held: scripts and a token-only browser both
+      // remain valid ways in.
+      ...(token ? { 'X-VS-Token': token } : {}),
       ...(body ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
-  if (response.status === 401) throw new Error('The service token was rejected.')
+  if (response.status === 401) {
+    if (!quiet401) onRejected()
+    throw new NotSignedIn('Not signed in, or the service token was rejected.')
+  }
   const failed = async (fallback: string) => {
     const data = await response.json().catch(() => ({}) as { detail?: string })
     return new Error(data.detail || fallback)
@@ -157,6 +204,14 @@ async function call<T>(
 
 export const api = {
   inbox: () => call<Inbox>('/inbox'),
+  // Signing in is separate from connecting a mailbox: one says who is using
+  // this, the other says which mailbox it works on.
+  me: () => call<Me>('/auth/me', { quiet401: true }),
+  authStatus: () => call<AuthStatus>('/auth/status'),
+  signInStart: () => call<{ authorization_url: string }>('/auth/login'),
+  signOut: () => call<{ signed_out: boolean }>('/auth/logout', { method: 'POST' }),
+  disconnectGmail: () =>
+    call<Disconnected>('/gmail/disconnect', { method: 'POST' }),
   email: (id: string) => call<{ result: Result; case: Case | null }>(`/inbox/${id}`),
   startRun: (options: { source: string; provider: string; labels: boolean }) =>
     call<Job>('/jobs/run', { method: 'POST', body: options }),

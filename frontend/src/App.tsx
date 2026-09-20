@@ -1,52 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { LogOut } from 'lucide-react'
 import Controls from './Controls'
 import Deck from './Deck'
 import Detail from './Detail'
 import GmailCard from '@/components/GmailCard'
-import { api, getToken, setToken, type Case, type GmailStatus, type Inbox, type Result } from '@/api'
+import SignIn from '@/components/SignIn'
+import {
+  api,
+  clearToken,
+  getToken,
+  whenRejected,
+  type Case,
+  type GmailStatus,
+  type Inbox,
+  type Me,
+  type Result,
+} from '@/api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import { CATEGORY_LABELS, REVIEW_REASONS, TONE_CLASS, relative, statusTone } from './format'
 
-function Gate({ onDone }: { onDone: () => void }) {
-  const [value, setValue] = useState('')
-  const go = () => {
-    setToken(value)
-    onDone()
-  }
-  return (
-    <div className="grid h-full place-items-center p-6">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>VS-Mail</CardTitle>
-          <p className="text-sm text-muted-foreground">
-            The service is protected by a shared secret, so this page needs the
-            same <code className="rounded bg-muted px-1 py-0.5 text-xs">VS_SERVICE_TOKEN</code>{' '}
-            the server was started with.
-          </p>
-        </CardHeader>
-        <CardContent className="flex gap-2">
-          <input
-            type="password"
-            placeholder="Service token"
-            className="h-9 flex-1 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-            value={value}
-            onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && value.trim() && go()}
-          />
-          <Button disabled={!value.trim()} onClick={go}>
-            Connect
-          </Button>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
 // The OAuth callback cannot return JSON — a person's browser lands on it —
 // so it says how it went in the URL and the app reports it here.
+const SIGNIN_OUTCOMES: Record<string, [string, string]> = {
+  ok: ['bg-clean-bg text-clean', 'Signed in.'],
+  denied: ['bg-defect-bg text-defect', 'That account could not sign in.'],
+  expired: ['bg-review-bg text-review', 'That sign-in took too long. Try again.'],
+  failed: ['bg-defect-bg text-defect', 'Sign-in failed.'],
+}
+
 const GMAIL_OUTCOMES: Record<string, [string, string]> = {
   connected: ['bg-clean-bg text-clean', 'Gmail connected.'],
   denied: ['bg-defect-bg text-defect', 'Gmail access was not granted.'],
@@ -54,9 +37,11 @@ const GMAIL_OUTCOMES: Record<string, [string, string]> = {
   failed: ['bg-defect-bg text-defect', 'Gmail could not be connected.'],
 }
 
-function readGmailOutcome(): { tone: string; message: string } | null {
+function readOutcome(): { tone: string; message: string } | null {
   const params = new URLSearchParams(window.location.search)
-  const outcome = GMAIL_OUTCOMES[params.get('gmail') ?? '']
+  const outcome =
+    GMAIL_OUTCOMES[params.get('gmail') ?? ''] ??
+    SIGNIN_OUTCOMES[params.get('signin') ?? '']
   if (!outcome) return null
   const [tone, message] = outcome
   const detail = params.get('detail')
@@ -67,7 +52,11 @@ function readGmailOutcome(): { tone: string; message: string } | null {
 }
 
 export default function App() {
-  const [ready, setReady] = useState(Boolean(getToken()))
+  // null while we are still asking. The session cookie is HttpOnly, so the
+  // page cannot read it — only the server knows, and showing a sign-in screen
+  // to somebody who is already signed in is worse than a brief blank.
+  const [ready, setReady] = useState<boolean | null>(null)
+  const [me, setMe] = useState<Me | null>(null)
   const [data, setData] = useState<Inbox | null>(null)
   const [gmail, setGmail] = useState<GmailStatus | null>(null)
   const [lane, setLane] = useState('BL_COMPARISON')
@@ -75,7 +64,7 @@ export default function App() {
   const [selected, setSelected] = useState<{ result: Result; case: Case | null } | null>(null)
   const [view, setView] = useState<'list' | 'deck'>('list')
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState(readGmailOutcome)
+  const [notice, setNotice] = useState(readOutcome)
 
   const load = useCallback(async () => {
     try {
@@ -86,11 +75,45 @@ export default function App() {
     }
   }, [])
 
+  // Ask who we are. A 401 here is an answer, not a failure: it means no
+  // session, and a held service token is still a valid way in.
+  useEffect(() => {
+    api
+      .me()
+      .then((who) => {
+        setMe(who)
+        setReady(true)
+      })
+      .catch(() => {
+        setMe(null)
+        setReady(Boolean(getToken()))
+      })
+  }, [])
+
+  // The trap this replaces: `ready` was set once and never went back, so a
+  // rotated VS_SERVICE_TOKEN left the page rendering the shell with an error
+  // and no way out short of clearing localStorage by hand.
+  useEffect(() => {
+    whenRejected(() => {
+      setMe(null)
+      setReady(false)
+    })
+  }, [])
+
   useEffect(() => {
     if (!ready) return
     load()
     api.gmailStatus().then(setGmail).catch(() => setGmail(null))
   }, [ready, load])
+
+  const signOut = useCallback(async () => {
+    // The cookie is the server's to clear; the token is ours.
+    await api.signOut().catch(() => {})
+    clearToken()
+    setMe(null)
+    setData(null)
+    setReady(false)
+  }, [])
 
   const open = useCallback(async (id: string) => {
     try {
@@ -112,7 +135,14 @@ export default function App() {
       : all
   }, [data, lane, onlyFlagged])
 
-  if (!ready) return <Gate onDone={() => setReady(true)} />
+  if (ready === null) {
+    return (
+      <div className="grid h-full place-items-center p-6 text-sm text-muted-foreground">
+        …
+      </div>
+    )
+  }
+  if (!ready) return <SignIn onDone={() => setReady(true)} />
 
   const stats = data?.stats
   const empty = stats && stats.total === 0
@@ -150,6 +180,20 @@ export default function App() {
 
         <div className="flex-1" />
         <Controls stats={stats} gmail={gmail} onChanged={refreshBoth} onError={setError} />
+
+        {/* Who is signed in, and the way out. Separate from the mailbox card
+            below, which says which mailbox the app works on. */}
+        <div className="flex items-center gap-2 border-l pl-4">
+          {me && (
+            <span className="max-w-44 truncate text-xs text-muted-foreground" title={me.email}>
+              {me.email}
+            </span>
+          )}
+          <Button size="sm" variant="ghost" onClick={signOut}>
+            <LogOut />
+            Sign out
+          </Button>
+        </div>
       </header>
 
       {error && (
@@ -230,7 +274,13 @@ export default function App() {
               <h3 className="px-2 py-1 text-[11px] uppercase tracking-wide text-muted-foreground">
                 Mailbox
               </h3>
-              <GmailCard gmail={gmail} onError={setError} />
+              <GmailCard
+                gmail={gmail}
+                onChanged={() =>
+                  api.gmailStatus().then(setGmail).catch(() => setGmail(null))
+                }
+                onError={setError}
+              />
             </div>
           )}
 

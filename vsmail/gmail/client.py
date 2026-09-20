@@ -191,6 +191,58 @@ def store(creds) -> None:
     TOKEN.write_text(creds.to_json())
 
 
+def forget() -> dict:
+    """Disconnect the mailbox, at Google's end as well as ours.
+
+    Deleting our copy alone is not a disconnect: Google still trusts the
+    grant, so reconnecting skips the consent screen entirely and anyone who
+    kept a copy of the token can still use it. Revoking kills the refresh
+    token where it actually lives.
+
+    ⚠️ When the token came from VS_GMAIL_TOKEN_JSON we cannot remove it — a
+    process cannot unset its deployment's environment variable. The revoke
+    still works, so what is left behind is a dead token in a variable, and
+    saying so by name beats reporting a clean disconnect that was not.
+    """
+    import httpx
+
+    result = {
+        "revoked": False,
+        "file_removed": False,
+        "still_in_environment": bool(os.environ.get(TOKEN_ENV)),
+    }
+
+    try:
+        info = stored_token()
+    except NotAuthorised:
+        info = None
+    if info is None:
+        return result
+
+    token = info.get("refresh_token") or info.get("token")
+    if token:
+        try:
+            response = httpx.post(
+                "https://oauth2.googleapis.com/revoke",
+                data={"token": token},
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+                timeout=10.0,
+            )
+            # Google answers 200 for a revoked token and 400 for one that was
+            # already invalid. Both mean it cannot be used, which is what was
+            # asked for.
+            result["revoked"] = response.status_code in (200, 400)
+        except Exception:
+            # Offline, or Google refused. The local copy still goes, and the
+            # caller is told the grant may still stand.
+            result["revoked"] = False
+
+    if TOKEN.is_file():
+        TOKEN.unlink()
+        result["file_removed"] = True
+    return result
+
+
 def stored_token() -> dict | None:
     """The authorised token, from the environment or from disk.
 

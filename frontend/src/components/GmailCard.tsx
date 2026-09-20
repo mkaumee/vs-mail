@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, Check, Clock, Mail } from 'lucide-react'
+import { AlertTriangle, Check, Clock, Mail, Unlink } from 'lucide-react'
 import { api, type GmailStatus } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -66,12 +66,16 @@ function describe(gmail: GmailStatus) {
 
 export default function GmailCard({
   gmail,
+  onChanged,
   onError,
 }: {
   gmail: GmailStatus
+  onChanged: () => void
   onError: (message: string) => void
 }) {
   const [going, setGoing] = useState(false)
+  const [dropping, setDropping] = useState(false)
+  const [dropped, setDropped] = useState<string | null>(null)
   const state = describe(gmail)
   const Icon = state.icon
 
@@ -88,6 +92,25 @@ export default function GmailCard({
     }
   }
 
+  // Deleting our copy is not a disconnect — Google would still trust the
+  // grant, so reconnecting would skip consent entirely. The server revokes.
+  const disconnect = async () => {
+    setDropping(true)
+    try {
+      const result = await api.disconnectGmail()
+      setDropped(
+        result.still_in_environment
+          ? 'Revoked at Google, but VS_GMAIL_TOKEN_JSON still holds it — remove that variable.'
+          : 'Disconnected and revoked at Google.',
+      )
+      onChanged()
+    } catch (error) {
+      onError((error as Error).message)
+    } finally {
+      setDropping(false)
+    }
+  }
+
   return (
     <Card className="gap-3 py-4">
       <CardContent className="flex items-start gap-3">
@@ -97,17 +120,20 @@ export default function GmailCard({
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
             {state.detail}
           </p>
-          {state.action && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              loading={going}
-              onClick={connect}
-            >
-              {state.action}
-            </Button>
-          )}
+          <div className="mt-3 flex flex-wrap gap-2">
+            {state.action && (
+              <Button size="sm" variant="outline" loading={going} onClick={connect}>
+                {state.action}
+              </Button>
+            )}
+            {gmail.authorised && (
+              <Button size="sm" variant="ghost" loading={dropping} onClick={disconnect}>
+                <Unlink />
+                Disconnect
+              </Button>
+            )}
+          </div>
+          {dropped && <p className="mt-2 text-xs text-muted-foreground">{dropped}</p>}
         </div>
       </CardContent>
     </Card>
