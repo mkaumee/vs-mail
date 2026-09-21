@@ -12,7 +12,7 @@ import pytest
 from tests.gmail_fake import FakeGmail, as_message
 from vsmail import pipeline, submission as sub
 from vsmail.gmail.labels import CATEGORY_LABELS, DEFECT_LABEL, REVIEW_LABEL, Labels, labels_for
-from vsmail.gmail.message import build_mime
+from vsmail.gmail.message import attachment_uri, build_mime
 from vsmail.gmail.source import GmailSource
 from vsmail.llm.mock import MockProvider
 
@@ -101,6 +101,34 @@ def test_a_small_inline_attachment_is_fetchable_without_attachment_api(tmp_path)
 
     assert inline_source.read_bytes(email.attachment_for("SI")) == raw
     assert gmail.attachments == {}, "the full message already held the bytes"
+
+
+def test_a_long_gmail_attachment_id_uses_a_fixed_size_cache_name(tmp_path):
+    """Gmail ids can be longer than the filesystem's per-name limit."""
+    gmail = FakeGmail()
+    attachment_id = "ANGjdJ-" + "x" * 400
+    gmail.attachments[("LONG1", attachment_id)] = b"document bytes"
+    source = GmailSource(gmail, cache=tmp_path)
+
+    data = source.read_bytes(
+        attachment_uri("LONG1", attachment_id, "Shipping Instructions.pdf")
+    )
+
+    assert data == b"document bytes"
+    cached = list((tmp_path / "attachments" / "LONG1").iterdir())
+    assert len(cached) == 1
+    assert len(cached[0].name) == 64
+
+
+def test_an_existing_short_id_cache_still_loads(tmp_path):
+    legacy = tmp_path / "attachments" / "M1" / "short-id"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"already cached")
+    source = GmailSource(FakeGmail(), cache=tmp_path)
+
+    assert source.read_bytes(
+        attachment_uri("M1", "short-id", "Draft BL.pdf")
+    ) == b"already cached"
 
 
 def test_messages_are_cached_after_the_first_read(source, mailbox, tmp_path):

@@ -16,6 +16,7 @@ import json
 import os
 import tempfile
 import threading
+from hashlib import sha256
 from pathlib import Path
 
 from vsmail.gmail.message import (
@@ -48,6 +49,17 @@ def _atomic_write(path: Path, data: bytes) -> None:
         temp_path.replace(path)
     finally:
         temp_path.unlink(missing_ok=True)
+
+
+def _attachment_cache_path(cache: Path, message_id: str, attachment_id: str) -> Path:
+    """Use a fixed-size cache key for Gmail's unbounded attachment ids.
+
+    Gmail attachment ids can exceed the filesystem's 255-byte filename limit.
+    The full id remains in the in-memory URI used for API requests; only the
+    local cache filename is hashed.
+    """
+    key = sha256(attachment_id.encode()).hexdigest()
+    return cache / "attachments" / message_id / key
 
 
 class GmailSource:
@@ -136,9 +148,17 @@ class GmailSource:
     # -- attachments -----------------------------------------------------
     def read_bytes(self, attachment_path: str) -> bytes:
         message_id, attachment_id, _ = parse_attachment_uri(attachment_path)
-        cached = self.cache / "attachments" / message_id / attachment_id
+        cached = _attachment_cache_path(self.cache, message_id, attachment_id)
         if cached.is_file():
             return cached.read_bytes()
+
+        # Reuse cache entries written by releases that stored short ids
+        # directly. Do not even construct/check a legacy path for a long id:
+        # stat() on it is the exact ENAMETOOLONG failure fixed here.
+        if len(os.fsencode(attachment_id)) <= 240:
+            legacy = self.cache / "attachments" / message_id / attachment_id
+            if legacy.is_file():
+                return legacy.read_bytes()
 
         if attachment_id.startswith("inline-"):
             # The full message already contains these bytes, so this normally
