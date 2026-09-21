@@ -67,8 +67,9 @@ provider configuration (`VS_PROVIDER`, default `deepseek`); there is no
 browser switch to offline rules or sample data. Missing model configuration
 fails visibly instead of silently using offline rules.
 
-Sample-data seeding and reset controls are kept out of the app. The developer
-scripts below remain available for preparing a judging mailbox. The reply
+The **Seed Gmail** button loads sample messages into the connected mailbox for
+judging, with progress shown while it runs. Reset controls stay out of the app.
+The developer scripts below also remain available. The reply
 composer's test-recipient field is retained for judges, so sends can still be
 diverted to their chosen address.
 

@@ -226,6 +226,7 @@ export const api = {
   // the one route with no token on it, so starting here is what authorises
   // the whole exchange.
   gmailAuthStart: () => call<{ authorization_url: string }>('/gmail/auth/start'),
+  seed: () => call<Job>('/gmail/seed', { method: 'POST' }),
   watchStatus: () => call<{ watching: boolean; job: Job | null }>('/watch/status'),
   startWatch: () =>
     call<Job>('/watch/start', { method: 'POST', body: { interval: 10 } }),

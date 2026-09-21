@@ -13,7 +13,7 @@ export default function Controls({
 }) {
   const [job, setJob] = useState<Job | null>(null)
   const [watching, setWatching] = useState(false)
-  const [starting, setStarting] = useState(false)
+  const [starting, setStarting] = useState<'run' | 'seed' | null>(null)
   const [changingWatch, setChangingWatch] = useState(false)
   const callbacks = useRef({ onChanged, onError })
   callbacks.current = { onChanged, onError }
@@ -22,7 +22,7 @@ export default function Controls({
   useEffect(() => {
     let active = true
     api.runningJobs().then(({ jobs }) => {
-      if (active) setJob(jobs.find((item) => item.kind === 'run') ?? null)
+      if (active) setJob(jobs.find((item) => item.kind === 'run' || item.kind === 'seed') ?? null)
     }).catch((error: Error) => {
       if (active) callbacks.current.onError(error.message)
     })
@@ -73,7 +73,7 @@ export default function Controls({
         const next = await api.job(job.id)
         setJob(next)
         if (next.state === 'failed') {
-          callbacks.current.onError(next.error || next.message || 'Inbox processing failed.')
+          callbacks.current.onError(next.error || next.message || 'The operation failed.')
         } else if (next.state !== 'running') {
           callbacks.current.onChanged()
         }
@@ -85,14 +85,14 @@ export default function Controls({
     return () => clearInterval(timer)
   }, [job])
 
-  const processInbox = async () => {
-    setStarting(true)
+  const start = async (kind: 'run' | 'seed') => {
+    setStarting(kind)
     try {
-      setJob(await api.startRun())
+      setJob(await (kind === 'seed' ? api.seed() : api.startRun()))
     } catch (error) {
       onError((error as Error).message)
     } finally {
-      setStarting(false)
+      setStarting(null)
     }
   }
 
@@ -113,28 +113,40 @@ export default function Controls({
     }
   }
 
-  const busy = starting || job?.state === 'running'
+  const busy = starting !== null || job?.state === 'running'
+  const processing = starting === 'run' || (job?.kind === 'run' && job.state === 'running')
+  const seeding = starting === 'seed' || (job?.kind === 'seed' && job.state === 'running')
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Button
-        loading={busy}
+        loading={processing}
         disabled={busy || !gmail?.ready}
-        onClick={processInbox}
+        onClick={() => start('run')}
       >
-        {job?.state === 'running' ? `Processing ${job.done}/${job.total}` : 'Process inbox'}
+        {job?.kind === 'run' && job.state === 'running' ? `Processing ${job.done}/${job.total}` : 'Process inbox'}
       </Button>
 
       {gmail?.ready ? (
-        <Button
-          variant={watching ? 'secondary' : 'outline'}
-          loading={changingWatch}
-          disabled={changingWatch}
-          onClick={toggleWatch}
-          title={watching ? 'Pause automatic processing of new mail' : 'Automatically process new mail'}
-        >
-          {watching ? 'Pause monitoring' : 'Resume monitoring'}
-        </Button>
+        <>
+          <Button
+            variant="outline"
+            loading={seeding}
+            disabled={busy}
+            onClick={() => start('seed')}
+          >
+            {job?.kind === 'seed' && job.state === 'running' ? `Seeding ${job.done}/${job.total}` : 'Seed Gmail'}
+          </Button>
+          <Button
+            variant={watching ? 'secondary' : 'outline'}
+            loading={changingWatch}
+            disabled={changingWatch}
+            onClick={toggleWatch}
+            title={watching ? 'Pause automatic processing of new mail' : 'Automatically process new mail'}
+          >
+            {watching ? 'Pause monitoring' : 'Resume monitoring'}
+          </Button>
+        </>
       ) : (
         <span className="text-xs text-muted-foreground">Connect Gmail to process your inbox.</span>
       )}
