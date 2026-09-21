@@ -6,15 +6,19 @@ look at, buttons that start work, and progress to watch while it runs.
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 from dataclasses import asdict
+from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 
 from api.auth import require_token
 from api.routes import build_provider
 from vsmail import pipeline, submission as submission_module
+from vsmail.documents import read_document
 from vsmail.inbox import Bundle
 from vsmail.jobs import JOBS, RUNNING
 from vsmail.results import ResultStore
@@ -85,11 +89,24 @@ async def inbox() -> dict:
     is the one holding documents to check.
     """
     store = _results()
+    review_cases = _review().queue()
+    lanes = store.lanes()
+    # HELP is a work queue, not a submission category. Keeping the original
+    # category intact is essential because the judging schema permits exactly
+    # five categories, while the screen still needs one place for every open
+    # human-review case.
+    lanes["HELP"] = [
+        store.results[case.email_id]
+        for case in review_cases
+        if case.email_id in store.results
+    ]
+    stats = store.stats()
+    stats["awaiting_review"] = len(review_cases)
     return {
-        "stats": store.stats(),
+        "stats": stats,
         "lanes": {
             name: [asdict(r) for r in items]
-            for name, items in store.lanes().items()
+            for name, items in lanes.items()
         },
     }
 
@@ -126,7 +143,7 @@ async def recheck(email_id: str) -> dict:
     Only this email is reprocessed; the other 519 are left alone.
     """
     try:
-        bundle, email = _email_from_source(email_id)
+        bundle, email = await asyncio.to_thread(_email_from_source, email_id)
     except (KeyError, FileNotFoundError):
         raise HTTPException(404, detail=f"no such email: {email_id}")
     except HTTPException:
@@ -189,7 +206,7 @@ async def reply_draft(email_id: str) -> dict:
         return {"draft": None, "why": why}
 
     try:
-        _, email = _email_from_source(email_id)
+        _, email = await asyncio.to_thread(_email_from_source, email_id)
     except (KeyError, FileNotFoundError):
         raise HTTPException(404, detail=f"no such email: {email_id}")
     except HTTPException:
@@ -313,7 +330,7 @@ async def incoming_email(email_id: str) -> dict:
     suspect the trim dropped something.
     """
     try:
-        _, email = _email_from_source(email_id)
+        _, email = await asyncio.to_thread(_email_from_source, email_id)
     except (KeyError, FileNotFoundError):
         raise HTTPException(404, detail=f"no such email: {email_id}")
     except HTTPException:
@@ -336,9 +353,106 @@ async def incoming_email(email_id: str) -> dict:
     }
 
 
+def _document_from_source(email_id: str, role: str) -> tuple[str, bytes]:
+    """Read one known SI/BL attachment without accepting a path from the URL."""
+    source, email = _email_from_source(email_id)
+    path = email.attachment_for(role)
+    if path is None:
+        raise FileNotFoundError(f"no {role} document for {email_id}")
+    return path, source.read_bytes(path)
+
+
+async def _load_document(email_id: str, role: str) -> tuple[str, bytes]:
+    role = role.upper()
+    if role not in ("SI", "BL"):
+        raise HTTPException(404, detail="document role must be SI or BL")
+    try:
+        return await asyncio.to_thread(_document_from_source, email_id, role)
+    except (KeyError, FileNotFoundError):
+        raise HTTPException(404, detail=f"no {role} document for {email_id}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, detail=f"The document could not be loaded: {exc}")
+
+
+def _document_media_type(name: str) -> str:
+    """Only mark formats browsers can display without executing attachment HTML."""
+    guessed = mimetypes.guess_type(name)[0] or "application/octet-stream"
+    safe_inline = {
+        "application/pdf",
+        "text/plain",
+        "image/png",
+        "image/jpeg",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
+        "image/tiff",
+    }
+    return guessed if guessed in safe_inline else "application/octet-stream"
+
+
+@app_router.get("/inbox/{email_id}/documents/{role}")
+async def document_file(email_id: str, role: str) -> Response:
+    """Return the original attachment to the authenticated in-page viewer."""
+    path, data = await _load_document(email_id, role)
+    name = Path(path).name
+    media_type = _document_media_type(name)
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={
+            "Content-Disposition": f"inline; filename*=UTF-8''{quote(name)}",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, max-age=300",
+        },
+    )
+
+
+@app_router.get("/inbox/{email_id}/documents/{role}/preview")
+async def document_preview(email_id: str, role: str) -> dict:
+    """Describe how to render an attachment and safely extract text formats."""
+    path, data = await _load_document(email_id, role)
+    name = Path(path).name
+    extension = Path(name).suffix.lower()
+    media_type = _document_media_type(name)
+
+    if extension == ".pdf":
+        return {
+            "name": name,
+            "role": role.upper(),
+            "media_type": media_type,
+            "mode": "pdf",
+            "text": None,
+            "error": None,
+        }
+    if media_type.startswith("image/"):
+        return {
+            "name": name,
+            "role": role.upper(),
+            "media_type": media_type,
+            "mode": "image",
+            "text": None,
+            "error": None,
+        }
+
+    document = await asyncio.to_thread(read_document, path, data, role.upper())
+    can_show_text = extension in (".txt", ".docx", ".xlsx", ".xlsm")
+    return {
+        "name": name,
+        "role": role.upper(),
+        "media_type": media_type,
+        "mode": "text" if can_show_text and document.readable else "download",
+        "text": document.text if can_show_text and document.readable else None,
+        "error": document.error if not document.readable else None,
+    }
+
+
 @app_router.get("/stats")
 async def stats() -> dict:
-    return _results().stats()
+    result = _results().stats()
+    result["awaiting_review"] = len(_review().queue())
+    return result
 
 
 # -- starting work -------------------------------------------------------

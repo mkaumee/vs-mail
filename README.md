@@ -76,6 +76,14 @@ below also remain available. The reply
 composer's test-recipient field is retained for judges, so sends can still be
 diverted to their chosen address.
 
+Open human-review cases appear in the **Help** queue beneath Invoice queries.
+The queue does not create a sixth submission category: each email keeps its
+required classification while a reviewer supplies a missing SI/BL value or
+acknowledges the escalation. SI and BL attachments can be opened in the page;
+PDFs and images render from authenticated local blobs, while text, Word, and
+spreadsheet files use escaped text previews with the original available for
+download.
+
 ```bash
 cd frontend && npm install && npm run build && cd ..
 export VS_SERVICE_TOKEN=pick-something

@@ -56,6 +56,39 @@ def test_the_inbox_comes_back_as_lanes(client, auth):
     assert body["lanes"]["BL_COMPARISON"][0]["status"] == "MISMATCH"
 
 
+def test_help_lane_contains_open_human_review_cases_without_changing_category(
+    client, auth
+):
+    body = client.get("/inbox", headers=auth).json()
+    help_rows = body["lanes"]["HELP"]
+
+    assert help_rows
+    assert len(help_rows) == body["stats"]["awaiting_review"]
+    assert "email_501" in {row["email_id"] for row in help_rows}
+    assert all(row["category"] != "HELP" for row in help_rows)
+
+
+def test_confirming_human_review_removes_it_from_help_but_not_its_real_lane(
+    client, auth
+):
+    before = client.get("/inbox", headers=auth).json()
+    before_count = before["stats"]["awaiting_review"]
+
+    response = client.post(
+        "/review/email_501/resolve",
+        headers=auth,
+        json={"by": "reviewer", "confirm": True},
+    )
+    assert response.status_code == 200
+
+    after = client.get("/inbox", headers=auth).json()
+    assert "email_501" not in {row["email_id"] for row in after["lanes"]["HELP"]}
+    assert "email_501" in {
+        row["email_id"] for row in after["lanes"]["BL_COMPARISON"]
+    }
+    assert after["stats"]["awaiting_review"] == before_count - 1
+
+
 def test_an_email_carries_its_field_detail(client, auth):
     body = client.get("/inbox/email_004", headers=auth).json()
     assert body["result"]["defect_fields"] == ["consignee", "notify_party"]
@@ -284,6 +317,41 @@ def test_the_incoming_email_comes_back_with_its_attachments(client, auth):
     assert body["body"].strip()
     # What was read out of each slot, beside the filenames.
     assert "characters of text" in body["si_source"]
+
+
+def test_a_pdf_document_is_served_inline_for_the_authenticated_viewer(client, auth):
+    response = client.get("/inbox/email_059/documents/SI", headers=auth)
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert response.content.startswith(b"%PDF")
+
+
+def test_word_and_spreadsheet_documents_get_safe_text_previews(client, auth):
+    word = client.get("/inbox/email_055/documents/BL/preview", headers=auth).json()
+    sheet = client.get("/inbox/email_055/documents/SI/preview", headers=auth).json()
+
+    assert word["mode"] == "text"
+    assert sheet["mode"] == "text"
+    assert word["text"].strip()
+    assert sheet["text"].strip()
+
+
+def test_document_viewer_rejects_unknown_roles_and_missing_documents(client, auth):
+    assert client.get("/inbox/email_004/documents/OTHER", headers=auth).status_code == 404
+    assert client.get("/inbox/email_506/documents/BL", headers=auth).status_code == 404
+
+
+def test_document_bytes_stay_behind_authentication(client):
+    assert client.get("/inbox/email_059/documents/SI").status_code == 401
+
+
+def test_active_attachment_content_is_never_served_as_same_origin_html():
+    from api.app_routes import _document_media_type
+
+    assert _document_media_type("unsafe.html") == "application/octet-stream"
+    assert _document_media_type("unsafe.svg") == "application/octet-stream"
 
 
 def test_a_gmail_email_opens_directly_without_listing_the_mailbox(

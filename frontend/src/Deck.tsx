@@ -8,6 +8,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Spinner } from '@/components/ui/spinner'
 import Fields from '@/components/Fields'
 import IncomingEmail from '@/components/IncomingEmail'
+import { HumanReview } from './Detail'
 import ReplyComposer from '@/components/ReplyComposer'
 import { useDeck } from './useDeck'
 import { useDrafts } from './useDrafts'
@@ -154,6 +155,15 @@ export default function Deck({
         {/* What the check found. The reply asserts a discrepancy; this is the
             evidence for it, and without it the assertion is unverifiable. */}
         <Fields fields={row.fields} />
+
+        {lane === 'HELP' && (
+          <HumanReview
+            key={row.email_id}
+            result={row}
+            onDone={onSent}
+            onError={setError}
+          />
+        )}
 
         {!entry && <Skeleton className="h-40 w-full" />}
 

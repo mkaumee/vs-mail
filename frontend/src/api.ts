@@ -77,6 +77,15 @@ export type IncomingEmail = {
   bl_source: string | null
 }
 
+export type DocumentPreview = {
+  name: string
+  role: 'SI' | 'BL'
+  media_type: string
+  mode: 'pdf' | 'image' | 'text' | 'download'
+  text: string | null
+  error: string | null
+}
+
 export type Me = { email: string; name: string; picture: string }
 
 export type AuthStatus = {
@@ -206,6 +215,23 @@ async function call<T>(
   return response.json() as Promise<T>
 }
 
+async function file(path: string): Promise<Blob> {
+  const token = getToken()
+  const response = await fetch(path, {
+    credentials: 'include',
+    headers: token ? { 'X-VS-Token': token } : {},
+  })
+  if (response.status === 401) {
+    onRejected()
+    throw new NotSignedIn('Not signed in, or the service token was rejected.')
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}) as { detail?: string })
+    throw new Error(data.detail || `GET ${path} failed (${response.status})`)
+  }
+  return response.blob()
+}
+
 export const api = {
   inbox: () => call<Inbox>('/inbox'),
   // Signing in is separate from connecting a mailbox: one says who is using
@@ -247,6 +273,10 @@ export const api = {
   // The email itself. A reply approved without reading what it answers is
   // not really approved.
   incoming: (id: string) => call<IncomingEmail>(`/inbox/${id}/email`),
+  documentPreview: (id: string, role: 'SI' | 'BL') =>
+    call<DocumentPreview>(`/inbox/${id}/documents/${role}/preview`),
+  documentFile: (id: string, role: 'SI' | 'BL') =>
+    file(`/inbox/${id}/documents/${role}`),
   replyIntoGmail: (id: string, body: { to: string; subject: string; body: string }) =>
     call<{ draft: Draft; threaded: boolean }>(`/inbox/${id}/reply/gmail`, {
       method: 'POST',

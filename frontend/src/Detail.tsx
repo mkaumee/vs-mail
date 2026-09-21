@@ -12,7 +12,7 @@ const FIELDS = Object.keys(FIELD_LABELS)
 // Resolving supplies a value; it never writes a verdict. The comparison runs
 // again over what the reviewer typed, so a wrong value produces a mismatch
 // rather than a rubber stamp.
-function Resolve({
+export function HumanReview({
   result,
   onDone,
   onError,
@@ -22,7 +22,11 @@ function Resolve({
   onError: (message: string) => void
 }) {
   const [side, setSide] = useState<'si' | 'bl'>('si')
-  const [field, setField] = useState(result.defect_fields?.[0] || 'gross_weight_kg')
+  const [field, setField] = useState(
+    result.defect_fields?.[0] ||
+      result.fields.find((item) => item.uncertain || !item.si || !item.bl)?.field ||
+      'gross_weight_kg',
+  )
   const [value, setValue] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -30,10 +34,12 @@ function Resolve({
     setSaving(true)
     try {
       await api.resolve(result.email_id, payload)
-      // Then run the comparison again over what was just supplied. Without
-      // this the reviewer sees their own correction change nothing, which
-      // reads as a broken feature rather than a two-step one.
-      await api.recheck(result.email_id)
+      // A supplied value has to run through the comparator. Confirming the
+      // escalation only acknowledges it, so another paid model pass would
+      // add latency without changing the evidence.
+      if (!(payload as { confirm?: boolean }).confirm) {
+        await api.recheck(result.email_id)
+      }
       setValue('')
       onDone()
     } catch (error) {
@@ -49,47 +55,53 @@ function Resolve({
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm">Resolve</CardTitle>
+        <CardTitle className="text-sm">Human review</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Supply the correct value and the check runs again.
+          {result.category === 'BL_COMPARISON'
+            ? 'Supply a value for the system to compare again, or confirm that the escalation was correct.'
+            : 'Confirm that this email was correctly escalated for a person.'}
         </p>
       </CardHeader>
       <CardContent className="flex flex-wrap items-center gap-2">
-        <select
-          className={select}
-          value={side}
-          onChange={(e) => setSide(e.target.value as 'si' | 'bl')}
-        >
-          <option value="si">Shipping instruction</option>
-          <option value="bl">Bill of lading</option>
-        </select>
-        <select
-          className={select}
-          value={field}
-          onChange={(e) => setField(e.target.value)}
-        >
-          {FIELDS.map((f) => (
-            <option key={f} value={f}>
-              {FIELD_LABELS[f]}
-            </option>
-          ))}
-        </select>
-        <input
-          className={`${select} min-w-56 flex-1`}
-          placeholder="The correct value"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-        />
-        <Button
-          size="sm"
-          disabled={!value.trim()}
-          loading={saving}
-          onClick={() =>
-            submit({ by: 'reviewer', [side]: { [field]: value.trim() } })
-          }
-        >
-          Supply
-        </Button>
+        {result.category === 'BL_COMPARISON' && (
+          <>
+            <select
+              className={select}
+              value={side}
+              onChange={(e) => setSide(e.target.value as 'si' | 'bl')}
+            >
+              <option value="si">Shipping instruction</option>
+              <option value="bl">Bill of lading</option>
+            </select>
+            <select
+              className={select}
+              value={field}
+              onChange={(e) => setField(e.target.value)}
+            >
+              {FIELDS.map((f) => (
+                <option key={f} value={f}>
+                  {FIELD_LABELS[f]}
+                </option>
+              ))}
+            </select>
+            <input
+              className={`${select} min-w-56 flex-1`}
+              placeholder="The correct value"
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
+            />
+            <Button
+              size="sm"
+              disabled={!value.trim()}
+              loading={saving}
+              onClick={() =>
+                submit({ by: 'reviewer', [side]: { [field]: value.trim() } })
+              }
+            >
+              Supply
+            </Button>
+          </>
+        )}
         <Button
           size="sm"
           variant="outline"
@@ -181,7 +193,12 @@ export default function Detail({
 
       {result.category === 'BL_COMPARISON' &&
         (result.status !== 'OK' || corrected) && (
-          <Resolve result={result} onDone={onChanged} onError={onError} />
+          <HumanReview
+            key={result.email_id}
+            result={result}
+            onDone={onChanged}
+            onError={onError}
+          />
         )}
 
       <ReplyCard

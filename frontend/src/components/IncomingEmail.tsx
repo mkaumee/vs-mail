@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Paperclip } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Eye, Paperclip } from 'lucide-react'
 import type { IncomingEmail as Email } from '@/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import DocumentViewer from '@/components/DocumentViewer'
 
 const filename = (path: string) => path.split('/').pop() || path
 
@@ -20,8 +21,14 @@ const filename = (path: string) => path.split('/').pop() || path
  */
 export default function IncomingEmail({ email }: { email: Email }) {
   const [full, setFull] = useState(false)
+  const [selectedRole, setSelectedRole] = useState<'SI' | 'BL' | null>(null)
   const shown = full ? email.body : email.core_body
   const trimmed = email.body.length > email.core_body.length
+
+  useEffect(() => {
+    setFull(false)
+    setSelectedRole(null)
+  }, [email.email_id])
 
   return (
     <Card>
@@ -44,22 +51,46 @@ export default function IncomingEmail({ email }: { email: Email }) {
           <div className="space-y-1">
             {email.attachments.map((path) => {
               const name = filename(path)
+              const documentRole = /_SI\./i.test(name)
+                ? 'SI' as const
+                : /_BL\./i.test(name)
+                  ? 'BL' as const
+                  : null
               // Which slot this file filled, and what was actually read out
               // of it — a reviewer checking a verdict wants both.
-              const role = /_SI\./i.test(name)
+              const source = documentRole === 'SI'
                 ? email.si_source
-                : /_BL\./i.test(name)
+                : documentRole === 'BL'
                   ? email.bl_source
                   : null
               return (
-                <div key={path} className="flex items-center gap-2 text-xs">
+                <div key={path} className="flex flex-wrap items-center gap-2 text-xs">
                   <Paperclip className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="font-medium">{name}</span>
-                  {role && <span className="text-muted-foreground">{role}</span>}
+                  {source && <span className="text-muted-foreground">{source}</span>}
+                  {documentRole && (
+                    <Button
+                      className="ml-auto"
+                      size="xs"
+                      variant={selectedRole === documentRole ? 'secondary' : 'ghost'}
+                      onClick={() => setSelectedRole(documentRole)}
+                    >
+                      <Eye />
+                      View
+                    </Button>
+                  )}
                 </div>
               )
             })}
           </div>
+        )}
+
+        {selectedRole && (
+          <DocumentViewer
+            emailId={email.email_id}
+            role={selectedRole}
+            onClose={() => setSelectedRole(null)}
+          />
         )}
       </CardContent>
     </Card>

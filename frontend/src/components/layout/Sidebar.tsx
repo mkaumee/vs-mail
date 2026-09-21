@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 import {
-  CheckCircle2, FileCheck2, Inbox, Mail, MailOpen, Plug, Settings as Cog,
+  CheckCircle2, CircleHelp, FileCheck2, Inbox, Mail, MailOpen, Plug, Settings as Cog,
   ShieldAlert,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -11,6 +11,7 @@ const ICONS: Record<string, LucideIcon> = {
   BL_COMPARISON: FileCheck2,
   SI_REQUEST: Mail,
   INVOICE_QUERY: Inbox,
+  HELP: CircleHelp,
   GENERAL: MailOpen,
   SPAM: ShieldAlert,
   READ: CheckCircle2,
@@ -19,7 +20,7 @@ const ICONS: Record<string, LucideIcon> = {
 /** The queue, then what is finished. The order is the working order. */
 const GROUPS: { label: string; lanes: string[] }[] = [
   { label: 'Verification', lanes: ['BL_COMPARISON'] },
-  { label: 'Inbox', lanes: ['SI_REQUEST', 'INVOICE_QUERY', 'GENERAL', 'SPAM'] },
+  { label: 'Inbox', lanes: ['SI_REQUEST', 'INVOICE_QUERY', 'HELP', 'GENERAL', 'SPAM'] },
   { label: 'Done', lanes: ['READ'] },
 ]
 
@@ -58,8 +59,11 @@ export default function Sidebar({
               const items = data?.lanes?.[key] || []
               // Read is finished work; a count in the attention colour there
               // would read as something still to do.
-              const flagged =
-                key === 'READ' ? 0 : items.filter((r) => r.status !== 'OK').length
+              const flagged = key === 'READ'
+                ? 0
+                : key === 'HELP'
+                  ? items.length
+                  : items.filter((r) => r.status !== 'OK').length
               const Icon = ICONS[key] ?? Mail
               const active = view === 'lanes' && lane === key
               return (

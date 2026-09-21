@@ -4,6 +4,7 @@ export const CATEGORY_LABELS: Record<string, string> = {
   BL_COMPARISON: 'Document checks',
   SI_REQUEST: 'Draft requests',
   INVOICE_QUERY: 'Invoice queries',
+  HELP: 'Help',
   GENERAL: 'General',
   SPAM: 'Spam',
   // Replied to. Out of the queue, kept for looking back at.
