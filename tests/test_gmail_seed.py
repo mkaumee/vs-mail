@@ -98,3 +98,29 @@ def test_progress_is_reported_as_it_goes(bundle):
 def test_seeding_without_a_callback_still_works(bundle):
     """Scripts pass none, and the route is the only caller that wants one."""
     assert seeding.seed(FakeGmail(), bundle, limit=2)["inserted"] == 2
+
+
+def test_seeding_twice_skips_messages_already_in_the_mailbox(bundle):
+    gmail = FakeGmail()
+    first = seeding.seed(gmail, bundle, limit=3)
+    second = seeding.seed(gmail, bundle, limit=3)
+
+    assert first["inserted"] == 3
+    assert second["inserted"] == 0
+    assert second["skipped"] == 3
+    assert len(gmail.inserted) == 3
+
+
+def test_progress_reaches_total_even_when_an_email_is_skipped(bundle):
+    gmail = FakeGmail()
+    seeding.seed(gmail, bundle, limit=1)
+    seen = []
+
+    seeding.seed(
+        gmail,
+        bundle,
+        limit=2,
+        on_progress=lambda done, total: seen.append((done, total)),
+    )
+
+    assert seen == [(1, 2), (2, 2)]

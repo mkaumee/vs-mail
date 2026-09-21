@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type ReplyResponse } from '@/api'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import ReplyComposer from '@/components/ReplyComposer'
@@ -29,6 +30,7 @@ export default function ReplyCard({
   const drafts = useDrafts()
   const [reply, setReply] = useState<ReplyResponse | null>(null)
   const [failed, setFailed] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let live = true
@@ -41,12 +43,17 @@ export default function ReplyCard({
     return () => {
       live = false
     }
-  }, [emailId, version])
+  }, [attempt, emailId, version])
 
   if (failed) {
     return (
       <Card>
-        <CardContent className="py-5 text-sm text-defect">{failed}</CardContent>
+        <CardContent className="flex flex-wrap items-center gap-3 py-5 text-sm text-defect">
+          <span>{failed}</span>
+          <Button size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>
+            Try again
+          </Button>
+        </CardContent>
       </Card>
     )
   }

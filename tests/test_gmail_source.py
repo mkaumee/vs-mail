@@ -48,7 +48,8 @@ def source(mailbox, tmp_path):
 def test_the_whole_mailbox_is_read_including_spam(source, mailbox):
     """A misfiled email is still an email the desk has to deal with."""
     source.emails()
-    assert mailbox.queries[0] == "in:anywhere"
+    assert mailbox.queries[0] == "in:anywhere -in:trash"
+    assert mailbox.include_spam_trash[0] is True
 
 
 def test_every_email_comes_back_with_its_bundle_id(source):
@@ -76,6 +77,37 @@ def test_messages_are_cached_after_the_first_read(source, mailbox, tmp_path):
     GmailSource(mailbox, cache=tmp_path).emails()
     assert len(mailbox.queries) == calls + 1, "listing repeats; fetching should not"
     assert list((tmp_path / "messages").glob("*.json")), "messages should be on disk"
+
+
+def test_a_known_gmail_id_loads_one_message_without_listing(mailbox, tmp_path):
+    """Opening one card must not scan a judging mailbox with 520 messages."""
+    direct = GmailSource(mailbox, cache=tmp_path)
+    listings = len(mailbox.queries)
+    record = direct.get_message("M0")
+
+    assert record.email_id == "email_004"
+    assert len(mailbox.queries) == listings
+
+
+def test_message_ids_are_remembered_during_the_mailbox_read(source, mailbox):
+    source.emails()
+    listings = len(mailbox.queries)
+
+    assert source.message_id_for("email_004") == "M0"
+    assert len(mailbox.queries) == listings, "finding an id listed the mailbox twice"
+
+
+def test_a_partial_cache_file_is_refetched_instead_of_breaking_the_card(
+    mailbox, tmp_path
+):
+    cached = tmp_path / "messages" / "M0.json"
+    cached.parent.mkdir(parents=True)
+    cached.write_text('{"id":')
+
+    record = GmailSource(mailbox, cache=tmp_path).get_message("M0")
+
+    assert record.email_id == "email_004"
+    assert json.loads(cached.read_text())["id"] == "M0"
 
 
 def test_an_unknown_email_id_raises(source):

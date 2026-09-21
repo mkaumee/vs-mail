@@ -15,7 +15,7 @@ import time
 
 from vsmail.gmail.client import address
 from vsmail.gmail.labels import SEED_LABEL, Labels
-from vsmail.gmail.message import build_mime, encode, spread_dates
+from vsmail.gmail.message import ID_HEADER, build_mime, encode, spread_dates, to_record
 from vsmail.inbox import Bundle
 
 #: `insert` costs 25 quota units against a 250-per-second ceiling, so about
@@ -24,6 +24,51 @@ PER_SECOND = 8.0
 
 #: Retries on a rate-limit response, backing off each time.
 RETRIES = 4
+
+
+def _already_seeded(service, expected_ids: set[str]) -> set[str]:
+    """Bundle ids already carrying the seed label in this mailbox."""
+    messages: list[str] = []
+    token = None
+    while True:
+        listed = (
+            service.users()
+            .messages()
+            .list(
+                userId="me",
+                q=f"label:{SEED_LABEL}",
+                pageToken=token,
+                maxResults=500,
+            )
+            .execute()
+        )
+        messages.extend(item["id"] for item in listed.get("messages", []) or [])
+        token = listed.get("nextPageToken")
+        if not token:
+            break
+
+    # The normal repeat-click case: a full set is already present. Avoid 520
+    # metadata calls just to rediscover the ids the seeder itself inserted.
+    if len(messages) >= len(expected_ids):
+        return expected_ids
+
+    ids: set[str] = set()
+    for message_id in messages:
+        message = (
+            service.users()
+            .messages()
+            .get(
+                userId="me",
+                id=message_id,
+                format="metadata",
+                metadataHeaders=[ID_HEADER],
+            )
+            .execute()
+        )
+        email_id = to_record(message).email_id
+        if not email_id.startswith("gmail_"):
+            ids.add(email_id)
+    return ids
 
 
 def _with_retries(call):
@@ -62,10 +107,16 @@ def seed(
     seed_label = labels.id_for(SEED_LABEL)
     mailbox = address(service)
     dates = spread_dates(len(emails))
+    existing = _already_seeded(service, {email.email_id for email in emails})
 
-    inserted, failed = 0, []
+    inserted, skipped, failed = 0, 0, []
     interval = 1.0 / PER_SECOND
-    for email, sent_at in zip(emails, dates):
+    for completed, (email, sent_at) in enumerate(zip(emails, dates), start=1):
+        if email.email_id in existing:
+            skipped += 1
+            if on_progress:
+                on_progress(completed, len(emails))
+            continue
         attachments = []
         for path in email.attachments:
             try:
@@ -96,9 +147,14 @@ def seed(
         except Exception as exc:
             failed.append((email.email_id, str(exc)))
         if on_progress:
-            on_progress(inserted, len(emails))
+            on_progress(completed, len(emails))
 
-    return {"mailbox": mailbox, "inserted": inserted, "failed": failed}
+    return {
+        "mailbox": mailbox,
+        "inserted": inserted,
+        "skipped": skipped,
+        "failed": failed,
+    }
 
 
 def reset(service) -> dict:

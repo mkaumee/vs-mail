@@ -18,7 +18,18 @@ const fetchEmail = (id: string) => api.incoming(id)
 
 /** Everything about a verdict that should invalidate an edited reply. */
 const versionOf = (row: Result) =>
-  `${row.status}:${row.defect_fields.join(',')}:${row.provenance.length}`
+  JSON.stringify([
+    row.category,
+    row.status,
+    row.review_reason,
+    row.sender,
+    row.subject,
+    row.defect_fields,
+    row.fields.map((field) => [
+      field.field, field.si, field.bl, field.equal, field.note, field.uncertain,
+    ]),
+    row.provenance,
+  ])
 
 /**
  * One email at a time, with what it says, what the check found, and the
@@ -40,9 +51,14 @@ export default function Deck({
   // Memoised: usePrefetch depends on this array's identity, so a fresh
   // one every render would re-run the window on every render.
   const order = useMemo(() => rows.map((r) => r.email_id), [rows])
+  const replyKeys = useMemo(
+    () => rows.map((row) => `${row.email_id}:${versionOf(row)}`),
+    [rows],
+  )
   const { index, go, retry, retryEmail, current, entry, email, total } = useDeck(
     lane,
     order,
+    replyKeys,
     fetchReply,
     fetchEmail,
   )
@@ -128,7 +144,7 @@ export default function Deck({
           <Card>
             <CardContent className="flex flex-wrap items-center gap-3 py-5">
               <span className="text-sm text-defect">{email.message}</span>
-              <Button size="sm" variant="outline" onClick={() => retryEmail(current)}>
+              <Button size="sm" variant="outline" onClick={retryEmail}>
                 Try again
               </Button>
             </CardContent>
@@ -154,7 +170,7 @@ export default function Deck({
           <Card>
             <CardContent className="flex flex-wrap items-center gap-3 py-5">
               <span className="text-sm text-defect">{entry.message}</span>
-              <Button size="sm" variant="outline" onClick={() => retry(current)}>
+              <Button size="sm" variant="outline" onClick={retry}>
                 Try again
               </Button>
             </CardContent>

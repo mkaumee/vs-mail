@@ -46,6 +46,8 @@ function usePrefetch<T>(
    * again when the rows arrived and nothing was ever fetched.
    */
   order: string[],
+  /** Cache identity for each id. Replies include the verdict version. */
+  keys: string[],
   index: number,
   fetcher: (id: string) => Promise<T>,
 ) {
@@ -58,6 +60,9 @@ function usePrefetch<T>(
   // not depend on the cache it writes to — that would re-run on every arrival
   // and the guard would be doing all the work.
   const requested = useRef<Set<string>>(new Set())
+  // A retry can overlap the request it replaced. Only the newest response is
+  // allowed to write the cache, otherwise a late old response wins at random.
+  const generations = useRef<Map<string, number>>(new Map())
   const live = useRef(true)
 
   useEffect(() => {
@@ -68,42 +73,50 @@ function usePrefetch<T>(
   }, [])
 
   useEffect(() => {
-    const wanted = order.slice(index, index + 1 + LOOKAHEAD)
-    for (const id of wanted) {
-      if (!id || requested.current.has(id)) continue
-      requested.current.add(id)
-      setCache((c) => ({ ...c, [id]: { state: 'pending' } }))
+    const end = Math.min(order.length, index + 1 + LOOKAHEAD)
+    for (let position = index; position < end; position += 1) {
+      const id = order[position]
+      const key = keys[position] ?? id
+      if (!id || requested.current.has(key)) continue
+      requested.current.add(key)
+      const generation = (generations.current.get(key) ?? 0) + 1
+      generations.current.set(key, generation)
+      setCache((c) => ({ ...c, [key]: { state: 'pending' } }))
       fetcher(id)
         .then((value) => {
           // A response that arrives after the reader has moved on is still
           // kept. It is not wasted, just not on screen.
-          if (live.current) setCache((c) => ({ ...c, [id]: { state: 'ready', value } }))
+          if (live.current && generations.current.get(key) === generation) {
+            setCache((c) => ({ ...c, [key]: { state: 'ready', value } }))
+          }
         })
         .catch((error: Error) => {
-          if (live.current) {
-            setCache((c) => ({ ...c, [id]: { state: 'error', message: error.message } }))
+          if (live.current && generations.current.get(key) === generation) {
+            setCache((c) => ({ ...c, [key]: { state: 'error', message: error.message } }))
+            // Let a retry ask again, but never unlock a newer in-flight request.
+            requested.current.delete(key)
           }
-          // Let a retry ask again.
-          requested.current.delete(id)
         })
     }
-  }, [laneKey, index, nonce, fetcher, order])
+  }, [laneKey, index, nonce, fetcher, keys, order])
 
-  const retry = useCallback((id: string) => {
-    requested.current.delete(id)
+  const retry = useCallback((key: string) => {
+    requested.current.delete(key)
+    generations.current.set(key, (generations.current.get(key) ?? 0) + 1)
     setCache((c) => {
       const next = { ...c }
-      delete next[id]
+      delete next[key]
       return next
     })
     setNonce((n) => n + 1)
   }, [])
 
-  const forget = useCallback((id: string) => {
-    requested.current.delete(id)
+  const forget = useCallback((key: string) => {
+    requested.current.delete(key)
+    generations.current.set(key, (generations.current.get(key) ?? 0) + 1)
     setCache((c) => {
       const next = { ...c }
-      delete next[id]
+      delete next[key]
       return next
     })
   }, [])
@@ -114,12 +127,21 @@ function usePrefetch<T>(
 export function useDeck(
   laneKey: string,
   order: string[],
+  replyKeys: string[],
   fetchReply: (id: string) => Promise<ReplyResponse>,
   fetchEmail: (id: string) => Promise<IncomingEmail>,
 ) {
   const [index, setIndex] = useState(0)
   const ids = useRef<string[]>(order)
   ids.current = order
+  const activeId = useRef<string | undefined>(undefined)
+  const activeLane = useRef(laneKey)
+
+  const laneChanged = activeLane.current !== laneKey
+  if (laneChanged) {
+    activeLane.current = laneKey
+    activeId.current = undefined
+  }
 
   // Lane changed. Start at the top; keep the caches, because coming back to a
   // lane should not regenerate what was already paid for. Keyed on the lane
@@ -128,30 +150,57 @@ export function useDeck(
     setIndex(0)
   }, [laneKey])
 
-  const replies = usePrefetch<ReplyResponse>(laneKey, order, index, fetchReply)
+  const maximum = Math.max(order.length - 1, 0)
+  const stillHere = activeId.current ? order.indexOf(activeId.current) : -1
+  const safeIndex = laneChanged ? 0 : stillHere >= 0 ? stillHere : Math.min(index, maximum)
+
+  // Sending/removing the last item shrinks the lane. Keep rendering the new
+  // last item immediately instead of returning a blank frame for one render.
+  useEffect(() => {
+    setIndex(safeIndex)
+  }, [safeIndex])
+
+  const replies = usePrefetch<ReplyResponse>(
+    laneKey,
+    order,
+    replyKeys,
+    safeIndex,
+    fetchReply,
+  )
   // The same window, but a file read rather than a model call — so it lands
   // first and the email is on screen while its reply is still being drafted,
   // which is the order you would want to read them in anyway.
-  const emails = usePrefetch<IncomingEmail>(laneKey, order, index, fetchEmail)
+  const emails = usePrefetch<IncomingEmail>(laneKey, order, order, safeIndex, fetchEmail)
 
   const go = useCallback(
-    (delta: number) =>
-      setIndex((i) => Math.min(Math.max(i + delta, 0), Math.max(ids.current.length - 1, 0))),
+    (delta: number) => {
+      setIndex((i) => {
+        const last = Math.max(ids.current.length - 1, 0)
+        const current = activeId.current
+          ? ids.current.indexOf(activeId.current)
+          : Math.min(i, last)
+        const target = Math.min(Math.max(Math.max(current, 0) + delta, 0), last)
+        activeId.current = ids.current[target]
+        return target
+      })
+    },
     [],
   )
 
-  const current = order[index]
+  const current = order[safeIndex]
+  activeId.current = current
+  const replyKey = replyKeys[safeIndex]
   return {
-    index,
+    index: safeIndex,
     go,
     current,
     total: order.length,
-    entry: current ? replies.cache[current] : undefined,
+    entry: replyKey ? replies.cache[replyKey] : undefined,
     email: current ? emails.cache[current] : undefined,
-    retry: replies.retry,
-    retryEmail: emails.retry,
+    retry: () => replyKey && replies.retry(replyKey),
+    retryEmail: () => current && emails.retry(current),
     /** Drop a cached reply so the next pass asks for it again. */
-    forgetReply: replies.forget,
+    forgetReply: () => replyKey && replies.forget(replyKey),
     cache: replies.cache,
   }
 }

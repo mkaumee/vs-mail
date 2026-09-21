@@ -17,7 +17,7 @@ export default defineConfig({
   build: { outDir: '../api/static', emptyOutDir: true },
   server: {
     proxy: Object.fromEntries(
-      ['/inbox', '/stats', '/jobs', '/gmail', '/watch', '/review', '/health']
+      ['/inbox', '/stats', '/jobs', '/gmail', '/watch', '/review', '/health', '/auth']
         .map((path) => [path, { target: 'http://localhost:8000', changeOrigin: true }])
     ),
   },

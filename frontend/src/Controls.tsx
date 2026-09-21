@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { api, type GmailStatus, type Job } from '@/api'
 import { Button } from '@/components/ui/button'
 
+const RESUME_WATCH_AFTER_SEED = 'vsmail.resumeWatchAfterSeed'
+
 export default function Controls({
   gmail,
   onChanged,
@@ -21,8 +23,15 @@ export default function Controls({
   // A watcher runs continuously; it must not occupy the inbox processing slot.
   useEffect(() => {
     let active = true
-    api.runningJobs().then(({ jobs }) => {
-      if (active) setJob(jobs.find((item) => item.kind === 'run' || item.kind === 'seed') ?? null)
+    api.runningJobs().then(async ({ jobs }) => {
+      if (!active) return
+      const current = jobs.find((item) => item.kind === 'run' || item.kind === 'seed') ?? null
+      setJob(current)
+      if (!current && localStorage.getItem(RESUME_WATCH_AFTER_SEED) === '1') {
+        localStorage.removeItem(RESUME_WATCH_AFTER_SEED)
+        const watcher = await api.startWatch()
+        if (active) setWatching(watcher.state === 'running')
+      }
     }).catch((error: Error) => {
       if (active) callbacks.current.onError(error.message)
     })
@@ -77,6 +86,19 @@ export default function Controls({
         } else if (next.state !== 'running') {
           callbacks.current.onChanged()
         }
+        if (
+          next.kind === 'seed' &&
+          next.state !== 'running' &&
+          localStorage.getItem(RESUME_WATCH_AFTER_SEED) === '1'
+        ) {
+          localStorage.removeItem(RESUME_WATCH_AFTER_SEED)
+          try {
+            const watcher = await api.startWatch()
+            setWatching(watcher.state === 'running')
+          } catch (error) {
+            callbacks.current.onError((error as Error).message)
+          }
+        }
       } catch (error) {
         callbacks.current.onError((error as Error).message)
         setJob(null)
@@ -88,9 +110,25 @@ export default function Controls({
   const start = async (kind: 'run' | 'seed') => {
     setStarting(kind)
     try {
+      if (kind === 'seed' && watching) {
+        // Otherwise every inserted sample looks like new live mail and the
+        // model starts processing the mailbox while it is still being filled.
+        await api.stopWatch()
+        setWatching(false)
+        localStorage.setItem(RESUME_WATCH_AFTER_SEED, '1')
+      }
       setJob(await (kind === 'seed' ? api.seed() : api.startRun()))
     } catch (error) {
       onError((error as Error).message)
+      if (kind === 'seed' && localStorage.getItem(RESUME_WATCH_AFTER_SEED) === '1') {
+        localStorage.removeItem(RESUME_WATCH_AFTER_SEED)
+        try {
+          const watcher = await api.startWatch()
+          setWatching(watcher.state === 'running')
+        } catch (watchError) {
+          onError((watchError as Error).message)
+        }
+      }
     } finally {
       setStarting(null)
     }

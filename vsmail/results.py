@@ -75,7 +75,11 @@ def _source(document) -> str | None:
     return f"{len(document.text)} characters of text"
 
 
-def summarize(processed, record: EmailRecord | None = None) -> Result:
+def summarize(
+    processed,
+    record: EmailRecord | None = None,
+    gmail_message_id: str | None = None,
+) -> Result:
     """Flatten one processed email into something a browser can render."""
     verdict = processed.verdict
     fields = []
@@ -108,6 +112,7 @@ def summarize(processed, record: EmailRecord | None = None) -> Result:
         fields=fields,
         si_source=_source(processed.si),
         bl_source=_source(processed.bl),
+        gmail_message_id=gmail_message_id,
     )
 
 
@@ -156,10 +161,27 @@ class ResultStore:
         self.save()
         return dropped
 
-    def record(self, processed_list, records: dict[str, EmailRecord], source: str) -> None:
+    def record(
+        self,
+        processed_list,
+        records: dict[str, EmailRecord],
+        source: str,
+        gmail_message_ids: dict[str, str] | None = None,
+    ) -> None:
         for processed in processed_list:
             email_id = processed.verdict.email_id
-            self.results[email_id] = summarize(processed, records.get(email_id))
+            existing = self.results.get(email_id)
+            result = summarize(
+                processed,
+                records.get(email_id),
+                (gmail_message_ids or {}).get(email_id),
+            )
+            # A rerun updates the verdict; it does not unsend a reply or lose
+            # the Gmail identity needed to load and thread it efficiently.
+            if existing:
+                result.sent_at = existing.sent_at
+                result.gmail_message_id = result.gmail_message_id or existing.gmail_message_id
+            self.results[email_id] = result
         self.ran_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.source = source
         self.save()
@@ -172,7 +194,14 @@ class ResultStore:
         new run. Saying otherwise would make the whole inbox look fresher than
         it is.
         """
-        result = summarize(processed, record)
+        existing = self.results.get(processed.verdict.email_id)
+        result = summarize(
+            processed,
+            record,
+            existing.gmail_message_id if existing else None,
+        )
+        if existing:
+            result.sent_at = existing.sent_at
         self.results[processed.verdict.email_id] = result
         self.save()
         return result

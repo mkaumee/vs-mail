@@ -130,3 +130,39 @@ def test_the_category_is_untouched_by_being_read(store):
 
 def test_marking_an_unknown_email_is_not_an_error(store):
     assert store.mark_sent("email_999") is None
+
+
+def test_a_gmail_run_keeps_the_message_id(processed, bundle, tmp_path):
+    selected = next(item for item in processed if item.verdict.email_id == "email_004")
+    record = bundle.get("email_004")
+    store = ResultStore(tmp_path / "gmail-results.json")
+
+    store.record(
+        [selected],
+        {record.email_id: record},
+        "gmail",
+        {record.email_id: "MSG-004"},
+    )
+
+    assert store.results[record.email_id].gmail_message_id == "MSG-004"
+    assert ResultStore(store.path).results[record.email_id].gmail_message_id == "MSG-004"
+
+
+def test_reruns_preserve_delivery_and_gmail_identity(processed, bundle, tmp_path):
+    selected = next(item for item in processed if item.verdict.email_id == "email_004")
+    record = bundle.get("email_004")
+    store = ResultStore(tmp_path / "rerun-results.json")
+    store.record(
+        [selected],
+        {record.email_id: record},
+        "gmail",
+        {record.email_id: "MSG-004"},
+    )
+    store.mark_sent(record.email_id, "2026-09-21T00:00:00+00:00")
+
+    store.update_one(selected, record)
+    store.record([selected], {record.email_id: record}, "gmail")
+
+    result = store.results[record.email_id]
+    assert result.gmail_message_id == "MSG-004"
+    assert result.sent_at == "2026-09-21T00:00:00+00:00"

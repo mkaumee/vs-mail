@@ -201,6 +201,34 @@ def test_writing_into_gmail_without_a_mailbox_explains_itself(client, auth, monk
     assert "Connect Gmail" in response.json()["detail"]
 
 
+def test_the_edited_words_are_what_the_gmail_draft_contains(
+    client, auth, monkeypatch
+):
+    import base64
+
+    from tests.gmail_fake import FakeGmail
+    from vsmail.gmail import client as gmail_client
+
+    gmail = FakeGmail()
+    monkeypatch.setattr(gmail_client, "service", lambda: gmail)
+    edited = {
+        "to": "reviewer@example.com",
+        "subject": "RE: corrected subject",
+        "body": "These are the exact words the reviewer approved.",
+    }
+
+    response = client.post(
+        "/inbox/email_004/reply/gmail", headers=auth, json=edited
+    )
+
+    assert response.status_code == 200
+    assert response.json()["draft"]["body"] == edited["body"]
+    raw = gmail.drafts_created[0]["message"]["raw"]
+    message = base64.urlsafe_b64decode(raw.encode()).decode()
+    assert edited["body"] in message
+    assert f"To: {edited['to']}" in message
+
+
 def test_a_mismatch_can_be_resolved_through_the_api(client, auth):
     """Regression, found by clicking Resolve on a mismatch.
 
@@ -256,6 +284,48 @@ def test_the_incoming_email_comes_back_with_its_attachments(client, auth):
     assert body["body"].strip()
     # What was read out of each slot, beside the filenames.
     assert "characters of text" in body["si_source"]
+
+
+def test_a_gmail_email_opens_directly_without_listing_the_mailbox(
+    client, auth, monkeypatch, tmp_path, bundle
+):
+    from tests.gmail_fake import FakeGmail, as_message
+    from vsmail.gmail import client as gmail_client
+    from vsmail.gmail import source as gmail_source
+    from vsmail.gmail.message import build_mime
+    from vsmail.results import ResultStore
+
+    record = bundle.get("email_004")
+    message = build_mime(record, [], "judge@example.com")
+    gmail = FakeGmail({"MSG-004": as_message(message, "MSG-004")})
+    monkeypatch.setattr(gmail_client, "service", lambda: gmail)
+    monkeypatch.setattr(gmail_source, "CACHE", tmp_path / "gmail-cache")
+
+    store = ResultStore(tmp_path / "results.json")
+    store.source = "gmail"
+    store.results["email_004"].gmail_message_id = "MSG-004"
+    store.save()
+
+    response = client.get("/inbox/email_004/email", headers=auth)
+
+    assert response.status_code == 200
+    assert response.json()["subject"] == record.subject
+    assert gmail.queries == [], "opening one card listed the whole mailbox"
+
+
+def test_a_mailbox_failure_is_visible_instead_of_looking_like_a_missing_email(
+    client, auth, monkeypatch
+):
+    from api import app_routes
+
+    def broken(_email_id):
+        raise RuntimeError("Gmail timed out")
+
+    monkeypatch.setattr(app_routes, "_email_from_source", broken)
+    response = client.get("/inbox/email_004/email", headers=auth)
+
+    assert response.status_code == 502
+    assert "Gmail timed out" in response.json()["detail"]
 
 
 def test_the_trimmed_body_is_shorter_than_the_full_one(client, auth):

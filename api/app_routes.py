@@ -50,6 +50,31 @@ def _source(name: str):
     return Bundle() if name in ("", "bundle") else Bundle(name)
 
 
+def _email_from_source(email_id: str):
+    """Load one email, using its stored Gmail id when available.
+
+    New results open with one Gmail lookup. The fallback keeps results written
+    before Gmail ids were stored readable until their next run.
+    """
+    source_name = _result_source()
+    source = _source(source_name)
+    result = _results().results.get(email_id)
+    if source_name == "gmail" and result and result.gmail_message_id:
+        return source, source.get_message(result.gmail_message_id)
+    email = source.get(email_id)
+    if source_name == "gmail" and result:
+        # Upgrade results written before Gmail ids were persisted. This first
+        # lookup may scan once; every later card load is direct.
+        message_id = source.message_id_for(email_id)
+        if message_id:
+            store = _results()
+            current = store.results.get(email_id)
+            if current:
+                current.gmail_message_id = message_id
+                store.save()
+    return source, email
+
+
 # -- looking at the inbox ------------------------------------------------
 @app_router.get("/inbox")
 async def inbox() -> dict:
@@ -99,12 +124,14 @@ async def recheck(email_id: str) -> dict:
 
     Only this email is reprocessed; the other 519 are left alone.
     """
-    source = _result_source()
-    bundle = _source(source)
     try:
-        email = bundle.get(email_id)
-    except Exception:
+        bundle, email = _email_from_source(email_id)
+    except (KeyError, FileNotFoundError):
         raise HTTPException(404, detail=f"no such email: {email_id}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, detail=f"The mailbox could not load this email: {exc}")
 
     review = _review()
     provider = build_provider()
@@ -160,11 +187,14 @@ async def reply_draft(email_id: str) -> dict:
         }.get(result.category, "no reply is drafted for this kind of email")
         return {"draft": None, "why": why}
 
-    source = _result_source()
     try:
-        email = _source(source).get(email_id)
-    except Exception:
-        email = None
+        _, email = _email_from_source(email_id)
+    except (KeyError, FileNotFoundError):
+        raise HTTPException(404, detail=f"no such email: {email_id}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, detail=f"The mailbox could not load this email: {exc}")
 
     provider = build_provider()
     try:
@@ -178,19 +208,29 @@ async def reply_draft(email_id: str) -> dict:
 
 
 @app_router.post("/inbox/{email_id}/reply/gmail")
-async def reply_into_gmail(email_id: str) -> dict:
+async def reply_into_gmail(email_id: str, payload: dict | None = None) -> dict:
     """Put that reply into Gmail as a draft, in the original thread.
 
     A draft, never a send. The system proposes words; a person presses send.
     """
     from vsmail.gmail import drafts as gmail_drafts
     from vsmail.gmail.client import NotAuthorised, service
-    from vsmail.reply import compose
+    from vsmail.reply import Draft, compose
 
     result = _results().results.get(email_id)
     if result is None:
         raise HTTPException(404, detail=f"nothing recorded for {email_id}")
-    draft = compose(result)
+    payload = payload or {}
+    if payload:
+        to = (payload.get("to") or "").strip()
+        subject = (payload.get("subject") or "").strip()
+        body = (payload.get("body") or "").strip()
+        if not (to and subject and body):
+            raise HTTPException(422, detail="a draft needs a recipient, a subject and a body")
+        draft = Draft(to=to, subject=subject, body=body, kind="edited")
+    else:
+        # Backward compatible for scripts and older browser builds.
+        draft = compose(result)
     if draft is None:
         raise HTTPException(422, detail="there is no reply to write for this email")
 
@@ -271,11 +311,14 @@ async def incoming_email(email_id: str) -> dict:
     classifier actually saw; the full text is what a person needs when they
     suspect the trim dropped something.
     """
-    source = _result_source()
     try:
-        email = _source(source).get(email_id)
-    except Exception:
+        _, email = _email_from_source(email_id)
+    except (KeyError, FileNotFoundError):
         raise HTTPException(404, detail=f"no such email: {email_id}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(502, detail=f"The mailbox could not load this email: {exc}")
 
     result = _results().results.get(email_id)
     return {
@@ -330,7 +373,12 @@ async def start_run(payload: dict | None = None) -> dict:
             await provider.aclose()
 
         records = {e.email_id: e for e in emails}
-        _results().record(processed, records, source_name)
+        gmail_message_ids = (
+            {email_id: source.message_id_for(email_id) for email_id in records}
+            if source_name == "gmail"
+            else None
+        )
+        _results().record(processed, records, source_name, gmail_message_ids)
         counts = review.sync(processed)
 
         if write_labels and source_name == "gmail":
@@ -543,8 +591,13 @@ async def gmail_seed(payload: dict | None = None) -> dict:
             job.total = total
 
         result = await asyncio.to_thread(seeding.seed, svc, None, limit, progress)
-        job.done = result["inserted"]
-        job.say(f"inserted {result['inserted']} into {result['mailbox']}")
+        job.done = result["inserted"] + result["skipped"] + len(result["failed"])
+        summary = f"inserted {result['inserted']} into {result['mailbox']}"
+        if result["skipped"]:
+            summary += f"; {result['skipped']} already present"
+        if result["failed"]:
+            summary += f"; {len(result['failed'])} failed"
+        job.say(summary)
         return result
 
     return JOBS.start("seed", work).as_dict()
@@ -636,7 +689,12 @@ async def watch_start(payload: dict | None = None) -> dict:
                         source, provider, record, store=review
                     )
                     entry = processed.verdict.to_submission_entry()
-                    results.record([processed], {record.email_id: record}, "gmail")
+                    results.record(
+                        [processed],
+                        {record.email_id: record},
+                        "gmail",
+                        {record.email_id: message_id},
+                    )
                     review.sync([processed])
                     if write_labels:
                         labels.apply(message_id, labels_for(entry))

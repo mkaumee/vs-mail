@@ -242,9 +242,10 @@ export const api = {
   // The email itself. A reply approved without reading what it answers is
   // not really approved.
   incoming: (id: string) => call<IncomingEmail>(`/inbox/${id}/email`),
-  replyIntoGmail: (id: string) =>
+  replyIntoGmail: (id: string, body: { to: string; subject: string; body: string }) =>
     call<{ draft: Draft; threaded: boolean }>(`/inbox/${id}/reply/gmail`, {
       method: 'POST',
+      body,
     }),
   // The words on screen are what goes out, not the ones we composed. Where
   // it goes is decided by the server, which refuses without a test address.

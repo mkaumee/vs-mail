@@ -99,7 +99,7 @@ export default function ReplyComposer({
   const intoGmail = async () => {
     setSaving(true)
     try {
-      const r = await api.replyIntoGmail(emailId)
+      const r = await api.replyIntoGmail(emailId, { to, subject, body })
       setSaved(r.threaded ? 'Draft created in the original thread.' : 'Draft created.')
     } catch (error) {
       onError((error as Error).message)
@@ -246,10 +246,18 @@ export default function ReplyComposer({
             {copied ? <Check className="text-clean" /> : <Copy />}
             {copied ? 'Copied' : 'Copy'}
           </Button>
-          <Button size="sm" variant="outline" loading={saving} onClick={intoGmail}>
-            <Mail />
-            Create Gmail draft
-          </Button>
+          {!sentAt && (
+            <Button
+              size="sm"
+              variant="outline"
+              loading={saving}
+              disabled={!to.trim() || !subject.trim() || !body.trim()}
+              onClick={intoGmail}
+            >
+              <Mail />
+              Create Gmail draft
+            </Button>
+          )}
           {edited && (
             <Button size="sm" variant="ghost" onClick={onReset}>
               <Undo2 />

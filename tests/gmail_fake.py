@@ -54,6 +54,7 @@ class FakeGmail:
         self.deleted: list[str] = []
         self.labels: dict[str, str] = {}
         self.queries: list[str] = []
+        self.include_spam_trash: list[bool] = []
 
     # -- the shape googleapiclient exposes ------------------------------
     def users(self):
@@ -101,8 +102,16 @@ class _Messages:
     def __init__(self, gmail: FakeGmail):
         self.gmail = gmail
 
-    def list(self, userId, q=None, pageToken=None, maxResults=None):
+    def list(
+        self,
+        userId,
+        q=None,
+        pageToken=None,
+        maxResults=None,
+        includeSpamTrash=False,
+    ):
         self.gmail.queries.append(q or "")
+        self.gmail.include_spam_trash.append(includeSpamTrash)
         return _Result({"messages": [{"id": k} for k in self.gmail.store]})
 
     def get(self, userId, id, format=None, metadataHeaders=None):
@@ -110,7 +119,14 @@ class _Messages:
 
     def insert(self, userId, body, internalDateSource=None):
         self.gmail.inserted.append(body)
-        return _Result({"id": f"ins{len(self.gmail.inserted)}"})
+        from email import policy
+        from email.parser import BytesParser
+
+        message_id = f"ins{len(self.gmail.inserted)}"
+        raw = base64.urlsafe_b64decode(body["raw"].encode())
+        message = BytesParser(policy=policy.default).parsebytes(raw)
+        self.gmail.store[message_id] = as_message(message, message_id)
+        return _Result({"id": message_id})
 
     def send(self, userId, body):
         self.gmail.sent.append(body)

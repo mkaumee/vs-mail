@@ -15,18 +15,33 @@ from __future__ import annotations
 import base64
 import json
 import os
+import tempfile
 from pathlib import Path
 
 from vsmail.gmail.message import parse_attachment_uri, to_record
 from vsmail.models import EmailRecord
 
-#: Everything in the mailbox: inbox, archive, spam and bin alike.
-DEFAULT_QUERY = "in:anywhere"
+#: Every live message, including Spam. Trash is excluded so resetting seeded
+#: data actually removes it from processing.
+DEFAULT_QUERY = "in:anywhere -in:trash"
 
 #: Fetching 520 messages and their attachments takes minutes over HTTP
 #: against under a second from disk, and nothing about a seeded message
 #: changes between runs.
 CACHE = Path(os.environ.get("VS_GMAIL_CACHE", ".gmail-cache"))
+
+
+def _atomic_write(path: Path, data: bytes) -> None:
+    """Publish a complete cache entry even when two card requests race."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    os.close(descriptor)
+    temp_path = Path(temporary)
+    try:
+        temp_path.write_bytes(data)
+        temp_path.replace(path)
+    finally:
+        temp_path.unlink(missing_ok=True)
 
 
 class GmailSource:
@@ -37,6 +52,7 @@ class GmailSource:
         self.query = query
         self.cache = Path(cache) if cache is not None else CACHE
         self._records: list[EmailRecord] | None = None
+        self._message_ids: dict[str, str] = {}
 
     # -- listing ---------------------------------------------------------
     def message_ids(self) -> list[str]:
@@ -46,7 +62,13 @@ class GmailSource:
             response = (
                 self.service.users()
                 .messages()
-                .list(userId="me", q=self.query, pageToken=token, maxResults=500)
+                .list(
+                    userId="me",
+                    q=self.query,
+                    pageToken=token,
+                    maxResults=500,
+                    includeSpamTrash=True,
+                )
                 .execute()
             )
             ids.extend(m["id"] for m in response.get("messages", []) or [])
@@ -58,21 +80,34 @@ class GmailSource:
     def _message(self, message_id: str) -> dict:
         cached = self.cache / "messages" / f"{message_id}.json"
         if cached.is_file():
-            return json.loads(cached.read_text())
+            try:
+                return json.loads(cached.read_text())
+            except (OSError, json.JSONDecodeError):
+                # An interrupted older process may have left a partial file.
+                # Fetching again is safer than turning it into a broken card.
+                pass
         message = (
             self.service.users()
             .messages()
             .get(userId="me", id=message_id, format="full")
             .execute()
         )
-        cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_text(json.dumps(message))
+        _atomic_write(cached, json.dumps(message).encode())
         return message
 
     def emails(self) -> list[EmailRecord]:
         if self._records is None:
-            self._records = [to_record(self._message(mid)) for mid in self.message_ids()]
+            self._records = []
+            for message_id in self.message_ids():
+                record = self.get_message(message_id)
+                self._records.append(record)
         return self._records
+
+    def get_message(self, message_id: str) -> EmailRecord:
+        """Read one known Gmail message without listing the whole mailbox."""
+        record = to_record(self._message(message_id))
+        self._message_ids[record.email_id] = message_id
+        return record
 
     def get(self, email_id: str) -> EmailRecord:
         for record in self.emails():
@@ -95,8 +130,7 @@ class GmailSource:
             .execute()
         )
         data = base64.urlsafe_b64decode(response["data"].encode())
-        cached.parent.mkdir(parents=True, exist_ok=True)
-        cached.write_bytes(data)
+        _atomic_write(cached, data)
         return data
 
     # -- the bundle offers these; a mailbox has no equivalent ------------
@@ -107,8 +141,6 @@ class GmailSource:
 
     def message_id_for(self, email_id: str) -> str | None:
         """The Gmail id behind a record, for writing labels back."""
-        for message_id in self.message_ids():
-            record = to_record(self._message(message_id))
-            if record.email_id == email_id:
-                return message_id
-        return None
+        if self._records is None:
+            self.emails()
+        return self._message_ids.get(email_id)
