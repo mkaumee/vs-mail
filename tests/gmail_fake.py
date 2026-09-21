@@ -55,6 +55,7 @@ class FakeGmail:
         self.labels: dict[str, str] = {}
         self.queries: list[str] = []
         self.include_spam_trash: list[bool] = []
+        self.profile_calls = 0
 
     # -- the shape googleapiclient exposes ------------------------------
     def users(self):
@@ -69,6 +70,7 @@ class _Users:
         self.gmail = gmail
 
     def getProfile(self, userId):
+        self.gmail.profile_calls += 1
         return _Result({"emailAddress": "ops@example.test"})
 
     def messages(self):

@@ -16,14 +16,13 @@ import time
 from vsmail.gmail.client import address
 from vsmail.gmail.labels import SEED_LABEL, Labels
 from vsmail.gmail.message import ID_HEADER, build_mime, encode, spread_dates, to_record
+from vsmail.gmail.retry import GmailTemporarilyBusy, execute
 from vsmail.inbox import Bundle
 
 #: `insert` costs 25 quota units against a 250-per-second ceiling, so about
-#: ten a second is the hard limit. Eight leaves room for the label calls.
-PER_SECOND = 8.0
-
-#: Retries on a rate-limit response, backing off each time.
-RETRIES = 4
+#: ten a second is the hard limit. Six leaves headroom for status, listing,
+#: and label calls made by the same user during the minute-long import.
+PER_SECOND = 6.0
 
 
 def _already_seeded(service, expected_ids: set[str]) -> set[str]:
@@ -31,7 +30,7 @@ def _already_seeded(service, expected_ids: set[str]) -> set[str]:
     messages: list[str] = []
     token = None
     while True:
-        listed = (
+        listed = execute(
             service.users()
             .messages()
             .list(
@@ -40,7 +39,6 @@ def _already_seeded(service, expected_ids: set[str]) -> set[str]:
                 pageToken=token,
                 maxResults=500,
             )
-            .execute()
         )
         messages.extend(item["id"] for item in listed.get("messages", []) or [])
         token = listed.get("nextPageToken")
@@ -54,7 +52,7 @@ def _already_seeded(service, expected_ids: set[str]) -> set[str]:
 
     ids: set[str] = set()
     for message_id in messages:
-        message = (
+        message = execute(
             service.users()
             .messages()
             .get(
@@ -63,26 +61,11 @@ def _already_seeded(service, expected_ids: set[str]) -> set[str]:
                 format="metadata",
                 metadataHeaders=[ID_HEADER],
             )
-            .execute()
         )
         email_id = to_record(message).email_id
         if not email_id.startswith("gmail_"):
             ids.add(email_id)
     return ids
-
-
-def _with_retries(call):
-    delay = 1.0
-    for attempt in range(RETRIES):
-        try:
-            return call()
-        except Exception as exc:  # googleapiclient raises HttpError
-            status = getattr(getattr(exc, "resp", None), "status", None)
-            if status not in (403, 429, 500, 503) or attempt == RETRIES - 1:
-                raise
-            time.sleep(delay)
-            delay *= 2
-    raise RuntimeError("unreachable")  # pragma: no cover
 
 
 def seed(
@@ -125,8 +108,8 @@ def seed(
                 failed.append((email.email_id, f"attachment {path}: {exc}"))
         try:
             started = time.monotonic()
-            _with_retries(
-                lambda: service.users()
+            execute(
+                service.users()
                 .messages()
                 .insert(
                     userId="me",
@@ -140,10 +123,13 @@ def seed(
                     # the whole mailbox collapses into one second.
                     internalDateSource="dateHeader",
                 )
-                .execute()
             )
             inserted += 1
             time.sleep(max(0.0, interval - (time.monotonic() - started)))
+        except GmailTemporarilyBusy:
+            # One exhausted per-minute window affects the entire mailbox.
+            # Continuing would wait another minute for every remaining item.
+            raise
         except Exception as exc:
             failed.append((email.email_id, str(exc)))
         if on_progress:
@@ -169,21 +155,19 @@ def reset(service) -> dict:
 
     trashed = 0
     while True:
-        listed = (
+        listed = execute(
             service.users()
             .messages()
             .list(userId="me", q=f"label:{SEED_LABEL}", maxResults=500)
-            .execute()
         )
         ids = [m["id"] for m in listed.get("messages", [])]
         if not ids:
             break
         for message_id in ids:
-            _with_retries(
-                lambda mid=message_id: service.users()
+            execute(
+                service.users()
                 .messages()
-                .trash(userId="me", id=mid)
-                .execute()
+                .trash(userId="me", id=message_id)
             )
             trashed += 1
         if not listed.get("nextPageToken"):

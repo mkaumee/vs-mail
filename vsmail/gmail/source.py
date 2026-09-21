@@ -16,9 +16,11 @@ import base64
 import json
 import os
 import tempfile
+import threading
 from pathlib import Path
 
 from vsmail.gmail.message import parse_attachment_uri, to_record
+from vsmail.gmail.retry import execute
 from vsmail.models import EmailRecord
 
 #: Every live message, including Spam. Trash is excluded so resetting seeded
@@ -52,28 +54,38 @@ class GmailSource:
         self.query = query
         self.cache = Path(cache) if cache is not None else CACHE
         self._records: list[EmailRecord] | None = None
+        self._records_complete = False
         self._message_ids: dict[str, str] = {}
+        # googleapiclient shares one httplib2 transport, which is not safe to
+        # use concurrently. Document reads run in worker threads so the web
+        # server stays responsive; this lock keeps their network calls serial.
+        self._api_lock = threading.Lock()
 
     # -- listing ---------------------------------------------------------
-    def message_ids(self) -> list[str]:
+    def message_ids(self, limit: int | None = None) -> list[str]:
         ids: list[str] = []
         token = None
         while True:
-            response = (
-                self.service.users()
-                .messages()
-                .list(
-                    userId="me",
-                    q=self.query,
-                    pageToken=token,
-                    maxResults=500,
-                    includeSpamTrash=True,
+            remaining = None if limit is None else limit - len(ids)
+            if remaining is not None and remaining <= 0:
+                break
+            with self._api_lock:
+                response = execute(
+                    self.service.users()
+                    .messages()
+                    .list(
+                        userId="me",
+                        q=self.query,
+                        pageToken=token,
+                        maxResults=min(500, remaining) if remaining is not None else 500,
+                        includeSpamTrash=True,
+                    )
                 )
-                .execute()
-            )
             ids.extend(m["id"] for m in response.get("messages", []) or [])
+            if limit is not None:
+                ids = ids[:limit]
             token = response.get("nextPageToken")
-            if not token:
+            if not token or (limit is not None and len(ids) >= limit):
                 break
         return ids
 
@@ -86,22 +98,24 @@ class GmailSource:
                 # An interrupted older process may have left a partial file.
                 # Fetching again is safer than turning it into a broken card.
                 pass
-        message = (
-            self.service.users()
-            .messages()
-            .get(userId="me", id=message_id, format="full")
-            .execute()
-        )
+        with self._api_lock:
+            message = execute(
+                self.service.users()
+                .messages()
+                .get(userId="me", id=message_id, format="full")
+            )
         _atomic_write(cached, json.dumps(message).encode())
         return message
 
-    def emails(self) -> list[EmailRecord]:
-        if self._records is None:
-            self._records = []
-            for message_id in self.message_ids():
-                record = self.get_message(message_id)
-                self._records.append(record)
-        return self._records
+    def emails(self, limit: int | None = None) -> list[EmailRecord]:
+        enough_cached = self._records is not None and (
+            self._records_complete or (limit is not None and len(self._records) >= limit)
+        )
+        if not enough_cached:
+            ids = self.message_ids(limit)
+            self._records = [self.get_message(message_id) for message_id in ids]
+            self._records_complete = limit is None or len(ids) < limit
+        return self._records if limit is None else self._records[:limit]
 
     def get_message(self, message_id: str) -> EmailRecord:
         """Read one known Gmail message without listing the whole mailbox."""
@@ -122,13 +136,13 @@ class GmailSource:
         if cached.is_file():
             return cached.read_bytes()
 
-        response = (
-            self.service.users()
-            .messages()
-            .attachments()
-            .get(userId="me", messageId=message_id, id=attachment_id)
-            .execute()
-        )
+        with self._api_lock:
+            response = execute(
+                self.service.users()
+                .messages()
+                .attachments()
+                .get(userId="me", messageId=message_id, id=attachment_id)
+            )
         data = base64.urlsafe_b64decode(response["data"].encode())
         _atomic_write(cached, data)
         return data

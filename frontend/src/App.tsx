@@ -356,7 +356,7 @@ function ReadLane({
         {!data && <SkeletonRows rows={6} className="p-3" />}
         {empty && (
           <p className="p-6 text-sm text-muted-foreground">
-            Nothing processed yet. Connect Gmail and press <b>Process inbox</b>.
+            Nothing processed yet. Connect Gmail and press <b>Process mail</b>.
           </p>
         )}
         {data && !empty && rows.length === 0 && (

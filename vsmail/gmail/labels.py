@@ -6,6 +6,7 @@ mailbox the ops desk already lives in, rather than only in a file we produced.
 from __future__ import annotations
 
 from vsmail.config import CATEGORIES
+from vsmail.gmail.retry import execute
 
 #: Applied to everything this system seeds, so a reset knows what to remove.
 #: Gmail cannot search on an arbitrary header, but it can search on a label.
@@ -33,14 +34,14 @@ class Labels:
         self._ids: dict[str, str] = {}
 
     def _load(self) -> None:
-        existing = self.service.users().labels().list(userId="me").execute()
+        existing = execute(self.service.users().labels().list(userId="me"))
         self._ids = {label["name"]: label["id"] for label in existing.get("labels", [])}
 
     def id_for(self, name: str) -> str:
         if not self._ids:
             self._load()
         if name not in self._ids:
-            created = (
+            created = execute(
                 self.service.users()
                 .labels()
                 .create(
@@ -51,7 +52,6 @@ class Labels:
                         "messageListVisibility": "show",
                     },
                 )
-                .execute()
             )
             self._ids[name] = created["id"]
         return self._ids[name]
@@ -59,11 +59,13 @@ class Labels:
     def apply(self, message_id: str, names: list[str]) -> None:
         if not names:
             return
-        self.service.users().messages().modify(
-            userId="me",
-            id=message_id,
-            body={"addLabelIds": [self.id_for(name) for name in names]},
-        ).execute()
+        execute(
+            self.service.users().messages().modify(
+                userId="me",
+                id=message_id,
+                body={"addLabelIds": [self.id_for(name) for name in names]},
+            )
+        )
 
 
 def labels_for(entry: dict) -> list[str]:

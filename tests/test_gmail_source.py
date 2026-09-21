@@ -56,6 +56,13 @@ def test_every_email_comes_back_with_its_bundle_id(source):
     assert {e.email_id for e in source.emails()} == set(SAMPLE)
 
 
+def test_a_limited_read_fetches_only_the_requested_messages(mailbox, tmp_path):
+    limited = GmailSource(mailbox, cache=tmp_path / "limited")
+
+    assert len(limited.emails(3)) == 3
+    assert len(limited._message_ids) == 3
+
+
 def test_attachments_are_fetchable_and_correct(source, bundle):
     record = source.get("email_004")
     from_gmail = source.read_bytes(record.attachment_for("SI"))

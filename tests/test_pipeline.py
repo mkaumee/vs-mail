@@ -2,6 +2,7 @@
 import pytest
 
 from vsmail import pipeline, submission
+from vsmail.gmail.retry import GmailTemporarilyBusy
 from vsmail.llm.mock import MockProvider
 
 
@@ -110,6 +111,37 @@ async def test_processing_keeps_the_evidence_behind_a_verdict(bundle):
     assert item.extraction.si["consignee"] == "EAST BRIGHT FZ-LLC"
     assert item.extraction.bl["consignee"] == "UAB NOVAKOPA"
     assert item.si.text and item.bl.text
+
+
+async def test_processing_reports_real_classification_and_extraction_stages(bundle):
+    email = bundle.get("email_004")
+    seen = []
+
+    await pipeline.process_email(
+        bundle,
+        MockProvider(),
+        email,
+        stage=lambda current, phase: seen.append((current.email_id, phase)),
+    )
+
+    assert seen == [
+        ("email_004", "classifying"),
+        ("email_004", "reading_documents"),
+        ("email_004", "extracting"),
+        ("email_004", "comparing"),
+        ("email_004", "checking_discrepancies"),
+    ]
+
+
+async def test_mailbox_quota_failure_is_not_recorded_as_a_bad_email(bundle, monkeypatch):
+    email = bundle.get("email_004")
+
+    def busy(path):
+        raise GmailTemporarilyBusy("try later")
+
+    monkeypatch.setattr(bundle, "read_bytes", busy)
+    with pytest.raises(GmailTemporarilyBusy, match="try later"):
+        await pipeline.process_all(bundle, MockProvider(), emails=[email])
 
 
 async def test_a_scan_records_that_it_was_read_as_images(bundle):

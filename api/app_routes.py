@@ -5,6 +5,7 @@ look at, buttons that start work, and progress to watch while it runs.
 """
 from __future__ import annotations
 
+import asyncio
 import os
 from dataclasses import asdict
 
@@ -343,7 +344,7 @@ async def stats() -> dict:
 # -- starting work -------------------------------------------------------
 @app_router.post("/jobs/run")
 async def start_run(payload: dict | None = None) -> dict:
-    """Process the whole inbox in the background.
+    """Process the requested number of newest emails in the background.
 
     A full model run is a couple of minutes, which no browser will wait for,
     so it returns a job to poll.
@@ -351,15 +352,57 @@ async def start_run(payload: dict | None = None) -> dict:
     payload = payload or {}
     source_name = payload.get("source", "gmail")
     write_labels = bool(payload.get("labels", True))
+    requested_limit = payload.get("limit")
+    if requested_limit is not None:
+        if isinstance(requested_limit, bool) or not isinstance(requested_limit, int):
+            raise HTTPException(422, detail="limit must be a whole number")
+        if not 1 <= requested_limit <= 1000:
+            raise HTTPException(422, detail="limit must be between 1 and 1000")
 
     async def work(job):
-        job.say(f"reading {source_name}")
+        job.set_phase("reading_mailbox", "Reading the mailbox")
         source = _source(source_name)
         provider = build_provider()
         review = _review()
-        emails = source.emails()
+        # Gmail's Python client is synchronous. Offloading this scan is what
+        # lets /jobs/{id} answer while a large mailbox is still loading.
+        try:
+            if source_name == "gmail":
+                # Stop Gmail at the requested count. Fetching the whole mailbox
+                # and slicing afterwards wastes quota and is why small demo runs
+                # could still hit the per-minute API limit.
+                emails = (
+                    await asyncio.to_thread(source.emails, requested_limit)
+                    if requested_limit is not None
+                    else await asyncio.to_thread(source.emails)
+                )
+            else:
+                emails = await asyncio.to_thread(source.emails)
+        except BaseException:
+            await provider.aclose()
+            raise
+        if source_name != "gmail" and requested_limit is not None:
+            emails = emails[:requested_limit]
         job.total = len(emails)
-        job.say(f"Processing {len(emails)} email(s)")
+        job.set_phase("classifying", f"Starting {len(emails)} email(s)")
+
+        phase_labels = {
+            "classifying": "Classifying email",
+            "reading_documents": "Reading attachments",
+            "extracting": "Extracting shipping fields",
+            "comparing": "Comparing SI and BL fields",
+            "checking_discrepancies": "Checking discrepancies",
+        }
+
+        def report_stage(email, phase: str) -> None:
+            subject = email.subject.strip() or email.email_id
+            if len(subject) > 64:
+                subject = f"{subject[:61]}..."
+            job.set_phase(
+                phase,
+                f"{phase_labels.get(phase, phase.replace('_', ' ').title())}: {subject}",
+                email.email_id,
+            )
 
         try:
             processed = await pipeline.process_all(
@@ -368,10 +411,12 @@ async def start_run(payload: dict | None = None) -> dict:
                 emails=emails,
                 store=review,
                 progress=lambda done, total: setattr(job, "done", done),
+                stage=report_stage,
             )
         finally:
             await provider.aclose()
 
+        job.set_phase("saving_results", "Saving results")
         records = {e.email_id: e for e in emails}
         gmail_message_ids = (
             {email_id: source.message_id_for(email_id) for email_id in records}
@@ -384,18 +429,23 @@ async def start_run(payload: dict | None = None) -> dict:
         if write_labels and source_name == "gmail":
             from vsmail.gmail.labels import Labels, labels_for
 
-            job.say("writing labels back to Gmail")
+            job.set_phase("applying_labels", "Applying labels in Gmail")
             writer = Labels(source.service)
             for item in processed:
                 message_id = source.message_id_for(item.verdict.email_id)
                 if message_id:
-                    writer.apply(
-                        message_id, labels_for(item.verdict.to_submission_entry())
+                    await asyncio.to_thread(
+                        writer.apply,
+                        message_id,
+                        labels_for(item.verdict.to_submission_entry()),
                     )
 
         result = submission_module.build([p.verdict for p in processed])
         problems = submission_module.validate(result, list(records))
-        job.say(f"done: {len(processed)} processed, {counts['opened']} new case(s)")
+        job.set_phase(
+            "complete",
+            f"Done: {len(processed)} processed, {counts['opened']} new case(s)",
+        )
         return {
             "processed": len(processed),
             "cases_opened": counts["opened"],
@@ -488,7 +538,7 @@ async def gmail_status() -> dict:
 
     if info["authorised"]:
         try:
-            info["mailbox"] = address(service())
+            info["mailbox"] = await asyncio.to_thread(address, service())
             info["ready"] = True
         except NotAuthorised as exc:
             # The seven-day expiry lands here. The page offers re-consent
@@ -572,6 +622,11 @@ async def gmail_auth_callback(
 @app_router.post("/gmail/seed")
 async def gmail_seed(payload: dict | None = None) -> dict:
     limit = (payload or {}).get("limit")
+    if limit is not None:
+        if isinstance(limit, bool) or not isinstance(limit, int):
+            raise HTTPException(422, detail="limit must be a whole number")
+        if not 1 <= limit <= 1000:
+            raise HTTPException(422, detail="limit must be between 1 and 1000")
 
     async def work(job):
         from vsmail.gmail import seed as seeding
@@ -579,11 +634,9 @@ async def gmail_seed(payload: dict | None = None) -> dict:
 
         svc = service()
         job.total = limit or len(Bundle().emails())
-        job.say("inserting messages")
+        job.set_phase("loading_samples", "Loading sample emails into Gmail")
         # The seeder is synchronous and rate-limited; a thread keeps the
         # event loop free so progress can still be polled.
-        import asyncio
-
         def progress(done: int, total: int) -> None:
             # Called from the seeder's thread. An int assignment is all this
             # is, and the page polls rather than being pushed to.
@@ -662,11 +715,8 @@ async def watch_start(payload: dict | None = None) -> dict:
     write_labels = payload.get("labels", True)
 
     async def work(job):
-        import asyncio
-
         from vsmail.gmail.client import address, service
         from vsmail.gmail.labels import Labels, labels_for
-        from vsmail.gmail.message import to_record
         from vsmail.gmail.source import GmailSource
 
         svc = service()
@@ -676,15 +726,19 @@ async def watch_start(payload: dict | None = None) -> dict:
         review = _review()
         results = _results()
 
-        seen = set(source.message_ids())
-        job.say(f"watching {address(svc)} — {len(seen)} existing message(s) ignored")
-
         try:
+            seen = set(await asyncio.to_thread(source.message_ids))
+            mailbox = await asyncio.to_thread(address, svc)
+            job.set_phase(
+                "monitoring",
+                f"watching {mailbox} — {len(seen)} existing message(s) ignored",
+            )
             while True:
                 await asyncio.sleep(interval)
-                fresh = [m for m in source.message_ids() if m not in seen]
+                listed = await asyncio.to_thread(source.message_ids)
+                fresh = [m for m in listed if m not in seen]
                 for message_id in fresh:
-                    record = to_record(source._message(message_id))
+                    record = await asyncio.to_thread(source.get_message, message_id)
                     processed = await pipeline.process_email(
                         source, provider, record, store=review
                     )
@@ -697,7 +751,9 @@ async def watch_start(payload: dict | None = None) -> dict:
                     )
                     review.sync([processed])
                     if write_labels:
-                        labels.apply(message_id, labels_for(entry))
+                        await asyncio.to_thread(
+                            labels.apply, message_id, labels_for(entry)
+                        )
                     seen.add(message_id)
                     job.done += 1
                     job.say(

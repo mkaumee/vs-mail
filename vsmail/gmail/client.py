@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 from pathlib import Path
 
 #: Inserting, reading, sending and labelling. `gmail.readonly` would not
@@ -52,6 +54,13 @@ TOKEN_ENV = "VS_GMAIL_TOKEN_JSON"
 #: derived from the incoming request — behind a proxy the request's own idea
 #: of its scheme and host is not reliable.
 DEFAULT_REDIRECT = "http://localhost:8000/gmail/auth/callback"
+
+# Gmail status, sample loading and the watcher all want the same address.
+# getProfile still consumes quota, so keep it for a few minutes rather than
+# paying for it on every screen load and again at the start of a job.
+_ADDRESS_CACHE: tuple[float, str] | None = None
+_ADDRESS_LOCK = threading.Lock()
+ADDRESS_CACHE_SECONDS = 300.0
 
 
 class NotAuthorised(RuntimeError):
@@ -186,6 +195,9 @@ def store(creds) -> None:
     writing one would only leave a stale copy behind to confuse the next
     person who looks.
     """
+    global _ADDRESS_CACHE
+    with _ADDRESS_LOCK:
+        _ADDRESS_CACHE = None
     if os.environ.get(TOKEN_ENV):
         return
     TOKEN.write_text(creds.to_json())
@@ -205,6 +217,10 @@ def forget() -> dict:
     saying so by name beats reporting a clean disconnect that was not.
     """
     import httpx
+
+    global _ADDRESS_CACHE
+    with _ADDRESS_LOCK:
+        _ADDRESS_CACHE = None
 
     result = {
         "revoked": False,
@@ -357,4 +373,15 @@ def address(svc) -> str:
     Worth printing before anything writes to it: seeding the wrong account is
     tedious to undo.
     """
-    return svc.users().getProfile(userId="me").execute().get("emailAddress", "unknown")
+    from vsmail.gmail.retry import execute
+
+    global _ADDRESS_CACHE
+    with _ADDRESS_LOCK:
+        now = time.monotonic()
+        if _ADDRESS_CACHE and now - _ADDRESS_CACHE[0] < ADDRESS_CACHE_SECONDS:
+            return _ADDRESS_CACHE[1]
+        mailbox = execute(svc.users().getProfile(userId="me")).get(
+            "emailAddress", "unknown"
+        )
+        _ADDRESS_CACHE = (now, mailbox)
+        return mailbox

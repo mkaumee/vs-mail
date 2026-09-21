@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from typing import Callable
 
 from vsmail.compare import compare_all, decide
 from vsmail.config import CONFIDENCE_THRESHOLD, CONSENSUS_MODE, EQUIVALENCE_MODE
@@ -14,6 +15,7 @@ from vsmail.consensus import extract_with_consensus
 from vsmail.documents import read_document
 from vsmail.documents.kinds import DISQUALIFYING
 from vsmail.equivalence import concerns_for, disputes
+from vsmail.gmail.retry import GmailTemporarilyBusy
 from vsmail.inbox import Bundle
 from vsmail.llm.base import Provider
 from vsmail.models import Document, EmailRecord, Extraction, Verdict
@@ -22,6 +24,8 @@ from vsmail.review import apply_corrections
 #: Concurrent in-flight emails. High enough to keep a 520-email run brisk,
 #: low enough not to trip provider rate limits.
 DEFAULT_CONCURRENCY = 12
+
+StageCallback = Callable[[EmailRecord, str], None]
 
 
 @dataclass
@@ -54,12 +58,18 @@ def _load(bundle: Bundle, email: EmailRecord, role: str) -> Document | None:
         return None
     try:
         return read_document(path, bundle.read_bytes(path))
+    except GmailTemporarilyBusy:
+        raise
     except Exception as exc:  # the attachment is referenced but unfetchable
         return Document(path=path, role=role, readable=False, error=str(exc))
 
 
 async def process_email(
-    bundle: Bundle, provider: Provider, email: EmailRecord, store=None
+    bundle: Bundle,
+    provider: Provider,
+    email: EmailRecord,
+    store=None,
+    stage: StageCallback | None = None,
 ) -> Processed:
     """Classify one email and, if it is a comparison request, decide it.
 
@@ -67,6 +77,11 @@ async def process_email(
     overlaid on what the provider read and then compared normally, so a
     resolved email reaches its verdict through the same path as any other.
     """
+    def report(name: str) -> None:
+        if stage is not None:
+            stage(email, name)
+
+    report("classifying")
     classification = await provider.classify(email)
     category = classification.category
 
@@ -87,8 +102,14 @@ async def process_email(
             concerns=tuple(concerns),
         )
 
-    si = _load(bundle, email, "SI")
-    bl = _load(bundle, email, "BL")
+    report("reading_documents")
+    # A Gmail attachment is a synchronous API call. Running both reads in
+    # worker threads keeps the event loop free, so the browser can continue
+    # polling the job instead of appearing frozen while documents download.
+    si, bl = await asyncio.gather(
+        asyncio.to_thread(_load, bundle, email, "SI"),
+        asyncio.to_thread(_load, bundle, email, "BL"),
+    )
 
     blocked = (
         si is None
@@ -98,7 +119,11 @@ async def process_email(
         or si.doc_kind in DISQUALIFYING
         or bl.doc_kind in DISQUALIFYING
     )
-    extraction = None if blocked else await extract_with_consensus(provider, si, bl)
+    if blocked:
+        extraction = None
+    else:
+        report("extracting")
+        extraction = await extract_with_consensus(provider, si, bl)
 
     corrections = store.corrections_for(email.email_id) if store else {}
     if extraction is not None and corrections:
@@ -149,6 +174,7 @@ async def process_email(
                 provenance=tuple(provenance),
             )
 
+    report("comparing")
     verdict = decide(email, category, si, bl, extraction)
 
     if verdict.status == "MISMATCH" and extraction is not None:
@@ -156,6 +182,7 @@ async def process_email(
         # A dispute adds a concern, which routes the case to a person; it
         # cannot clear the defect. A model able to approve a discrepancy is a
         # model able to approve the wrong one, quietly.
+        report("checking_discrepancies")
         disputed = await disputes(provider, compare_all(extraction))
         concerns.extend(concerns_for(disputed))
         if disputed and EQUIVALENCE_MODE == "blocking":
@@ -187,13 +214,15 @@ async def process_all(
     emails: list[EmailRecord] | None = None,
     store=None,
     progress=None,
+    stage: StageCallback | None = None,
 ) -> list[Processed]:
     """Process the inbox, preserving email order in the result.
 
     `emails` narrows the run to a subset, which is how a paid provider gets
     smoke-tested on a handful of emails before spending a full pass.
     `progress(done, total)` is called as each finishes, so a browser watching
-    a two-minute run has something to show.
+    a two-minute run has something to show. `stage(email, phase)` reports the
+    real work currently happening inside a worker.
     """
     emails = bundle.emails() if emails is None else emails
     limit = asyncio.Semaphore(concurrency)
@@ -211,7 +240,14 @@ async def process_all(
     async def one(email: EmailRecord) -> Processed:
         async with limit:
             try:
-                return await process_email(bundle, provider, email, store=store)
+                return await process_email(
+                    bundle, provider, email, store=store, stage=stage
+                )
+            except GmailTemporarilyBusy:
+                # This is a mailbox-wide condition, not a bad email. Let the
+                # job fail with a useful retry message instead of recording a
+                # false NEEDS_REVIEW verdict for every item.
+                raise
             except Exception as exc:
                 # The email still needs an entry — all 520 must be present —
                 # and it is escalated rather than quietly defaulted to OK, so
@@ -229,7 +265,14 @@ async def process_all(
             finally:
                 tick()
 
-    results = list(await asyncio.gather(*(one(email) for email in emails)))
+    tasks = [asyncio.create_task(one(email)) for email in emails]
+    try:
+        results = list(await asyncio.gather(*tasks))
+    except Exception:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
     if failures:
         print(f"  {len(failures)} email(s) failed and were escalated for review:")
         for email_id, message in failures[:5]:

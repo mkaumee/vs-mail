@@ -15,16 +15,16 @@ from __future__ import annotations
 from email.message import EmailMessage
 
 from vsmail.gmail.message import encode
+from vsmail.gmail.retry import execute
 
 
 def _original(service, message_id: str) -> tuple[str, str | None]:
     """The thread this message belongs to, and its RFC-822 Message-ID."""
-    message = (
+    message = execute(
         service.users()
         .messages()
         .get(userId="me", id=message_id, format="metadata",
              metadataHeaders=["Message-ID", "Subject"])
-        .execute()
     )
     headers = {
         h["name"].lower(): h["value"]
@@ -60,7 +60,7 @@ def create(service, draft, gmail_message_id: str | None) -> dict:
     if thread_id:
         body["message"]["threadId"] = thread_id
 
-    created = service.users().drafts().create(userId="me", body=body).execute()
+    created = execute(service.users().drafts().create(userId="me", body=body))
     return {
         "draft_id": created["id"],
         "thread_id": thread_id,

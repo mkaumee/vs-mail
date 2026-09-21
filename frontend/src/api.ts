@@ -127,6 +127,8 @@ export type Job = {
   done: number
   total: number
   message: string
+  phase: string
+  current_email?: string | null
   error?: string
 }
 
@@ -215,8 +217,11 @@ export const api = {
   disconnectGmail: () =>
     call<Disconnected>('/gmail/disconnect', { method: 'POST' }),
   email: (id: string) => call<{ result: Result; case: Case | null }>(`/inbox/${id}`),
-  startRun: () =>
-    call<Job>('/jobs/run', { method: 'POST', body: { source: 'gmail', labels: true } }),
+  startRun: (limit: number | null) =>
+    call<Job>('/jobs/run', {
+      method: 'POST',
+      body: { source: 'gmail', labels: true, ...(limit === null ? {} : { limit }) },
+    }),
   job: (id: string) => call<Job>(`/jobs/${id}`),
   // Work outlives the tab that started it, so a reloaded page adopts
   // whatever is still in flight rather than showing an idle screen.

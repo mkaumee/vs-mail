@@ -12,6 +12,50 @@ from vsmail.jobs import Jobs
 from vsmail.results import ResultStore
 
 
+@pytest.mark.parametrize("limit", [True, 0, -1, 1001, "10", 2.5])
+async def test_run_rejects_an_invalid_email_limit(limit):
+    with pytest.raises(HTTPException) as error:
+        await app_routes.start_run({"limit": limit})
+    assert error.value.status_code == 422
+
+
+@pytest.mark.parametrize("limit", [True, 0, -1, 1001, "10", 2.5])
+async def test_sample_load_rejects_an_invalid_email_limit(limit):
+    with pytest.raises(HTTPException) as error:
+        await app_routes.gmail_seed({"limit": limit})
+    assert error.value.status_code == 422
+
+
+async def test_run_passes_the_selected_limit_to_gmail(monkeypatch, tmp_path):
+    seen = []
+
+    class Mailbox:
+        service = object()
+
+        def emails(self, limit=None):
+            seen.append(limit)
+            return []
+
+    class Provider:
+        async def aclose(self):
+            pass
+
+    jobs = Jobs()
+    monkeypatch.setattr(app_routes, "JOBS", jobs)
+    monkeypatch.setattr(app_routes, "_source", lambda name: Mailbox())
+    monkeypatch.setattr(app_routes, "build_provider", lambda: Provider())
+    monkeypatch.setenv("VS_RESULTS_STORE", str(tmp_path / "results.json"))
+    monkeypatch.setenv("VS_REVIEW_STORE", str(tmp_path / "review.json"))
+
+    response = await app_routes.start_run(
+        {"source": "gmail", "limit": 25, "labels": False}
+    )
+    await jobs._tasks[response["id"]]
+
+    assert jobs.get(response["id"]).state == "done"
+    assert seen == [25]
+
+
 def test_service_defaults_to_live_processing(monkeypatch):
     monkeypatch.delenv("VS_PROVIDER", raising=False)
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)

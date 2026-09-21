@@ -17,6 +17,7 @@ from email.message import EmailMessage
 from pathlib import Path
 
 from vsmail.gmail.message import encode
+from vsmail.gmail.retry import execute
 
 
 def compose(
@@ -44,11 +45,10 @@ def compose(
 
 def send(service, message: EmailMessage) -> str:
     """Hand a message to Gmail for real delivery. Returns its message id."""
-    sent = (
+    sent = execute(
         service.users()
         .messages()
         .send(userId="me", body={"raw": encode(message)})
-        .execute()
     )
     return sent["id"]
 
@@ -133,7 +133,7 @@ def send_reply(
     if thread_id:
         payload["threadId"] = thread_id
 
-    sent = service.users().messages().send(userId="me", body=payload).execute()
+    sent = execute(service.users().messages().send(userId="me", body=payload))
     return {
         "message_id": sent["id"],
         "sent_to": recipient,

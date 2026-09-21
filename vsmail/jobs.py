@@ -33,6 +33,10 @@ class Job:
     finished_at: str | None = None
     #: Free text the page shows while it waits.
     message: str = ""
+    #: Machine-readable current step, used by the progress UI.
+    phase: str = "starting"
+    #: The item being handled when a step is item-specific.
+    current_email: str | None = None
     done: int = 0
     total: int = 0
     result: dict | None = None
@@ -45,6 +49,14 @@ class Job:
         del self.log[:-keep]
         self.message = line
 
+    def set_phase(
+        self, phase: str, message: str | None = None, current_email: str | None = None
+    ) -> None:
+        self.phase = phase
+        self.current_email = current_email
+        if message:
+            self.say(message)
+
     def as_dict(self) -> dict:
         return {
             "id": self.id,
@@ -53,6 +65,8 @@ class Job:
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "message": self.message,
+            "phase": self.phase,
+            "current_email": self.current_email,
             "done": self.done,
             "total": self.total,
             "result": self.result,
@@ -83,12 +97,16 @@ class Jobs:
             try:
                 job.result = await work(job)
                 job.state = DONE if job.state == RUNNING else job.state
+                if job.state == DONE:
+                    job.phase = "complete"
             except asyncio.CancelledError:
                 job.state = STOPPED
+                job.phase = "stopped"
                 job.say("stopped")
                 raise
             except Exception as exc:
                 job.state = FAILED
+                job.phase = "failed"
                 job.error = f"{type(exc).__name__}: {exc}"
                 job.say(job.error)
                 traceback.print_exc()
