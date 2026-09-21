@@ -17,6 +17,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime, parsedate_to_datetime
+from urllib.parse import quote, unquote
 
 from vsmail.models import EmailRecord
 
@@ -26,23 +27,23 @@ ID_HEADER = "X-VS-Email-Id"
 #: Marks a message this system put there, so a reset knows what to remove.
 SEED_HEADER = "X-VS-Seed"
 
-#: An attachment inside a Gmail message. It ends in the original filename so
-#: `role_from_path` and `attachment_for` keep resolving the SI and BL slots
-#: from the filename, exactly as they do for a local path.
+#: An attachment inside a Gmail message. The final component reversibly
+#: encodes the original filename, so role matching and the viewer see the
+#: same name while slashes or hashes cannot alter the URI structure.
 _URI = re.compile(r"^gmail://(?P<message>[^/]+)/(?P<attachment>[^/]+)/(?P<name>.+)$")
 
 _FALLBACK_TYPE = ("application", "octet-stream")
 
 
 def attachment_uri(message_id: str, attachment_id: str, filename: str) -> str:
-    return f"gmail://{message_id}/{attachment_id}/{filename}"
+    return f"gmail://{message_id}/{attachment_id}/{quote(filename, safe='')}"
 
 
 def parse_attachment_uri(uri: str) -> tuple[str, str, str]:
     match = _URI.match(uri)
     if not match:
         raise ValueError(f"not a Gmail attachment reference: {uri!r}")
-    return match["message"], match["attachment"], match["name"]
+    return match["message"], match["attachment"], unquote(match["name"])
 
 
 def _mime_type(filename: str) -> tuple[str, str]:
@@ -109,7 +110,13 @@ def _walk(part: dict):
 def _decode_body(data: str | None) -> str:
     if not data:
         return ""
-    return base64.urlsafe_b64decode(data.encode()).decode("utf-8", errors="replace")
+    return decode_data(data).decode("utf-8", errors="replace")
+
+
+def decode_data(data: str) -> bytes:
+    """Decode Gmail's base64url data whether or not it includes padding."""
+    encoded = data.encode()
+    return base64.urlsafe_b64decode(encoded + b"=" * (-len(encoded) % 4))
 
 
 def to_record(message: dict) -> EmailRecord:
@@ -124,11 +131,14 @@ def to_record(message: dict) -> EmailRecord:
 
     body_parts: list[str] = []
     attachments: list[str] = []
-    for part in _walk(payload):
+    for index, part in enumerate(_walk(payload)):
         filename = part.get("filename") or ""
         body = part.get("body", {}) or {}
-        if filename and body.get("attachmentId"):
-            attachments.append(attachment_uri(message_id, body["attachmentId"], filename))
+        if filename and (body.get("attachmentId") or "data" in body):
+            # Gmail may return small named files inline in body.data instead
+            # of issuing an attachmentId. They are still real attachments.
+            attachment_id = body.get("attachmentId") or f"inline-{index}"
+            attachments.append(attachment_uri(message_id, attachment_id, filename))
         elif part.get("mimeType") == "text/plain" and body.get("data"):
             body_parts.append(_decode_body(body["data"]))
 
@@ -158,4 +168,25 @@ def received_at(message: dict) -> datetime | None:
 
 
 def basename(uri: str) -> str:
+    if uri.startswith("gmail://"):
+        return parse_attachment_uri(uri)[2]
     return os.path.basename(uri)
+
+
+def inline_attachment_data(message: dict, attachment_id: str) -> bytes:
+    """Read a named attachment Gmail embedded in a full message resource."""
+    if not attachment_id.startswith("inline-"):
+        raise ValueError(f"not an inline attachment id: {attachment_id!r}")
+    try:
+        wanted = int(attachment_id.removeprefix("inline-"))
+    except ValueError as exc:
+        raise ValueError(f"bad inline attachment id: {attachment_id!r}") from exc
+    payload = message.get("payload", {}) or {}
+    for index, part in enumerate(_walk(payload)):
+        if index != wanted:
+            continue
+        body = part.get("body", {}) or {}
+        if not part.get("filename") or "data" not in body:
+            break
+        return decode_data(body["data"])
+    raise FileNotFoundError(f"inline attachment {attachment_id!r} is missing")

@@ -158,3 +158,34 @@ async def test_an_email_decided_before_reading_has_no_extraction(bundle):
     item = (await pipeline.process_all(bundle, MockProvider(), emails=emails))[0]
     assert item.verdict.review_reason == "unreadable"
     assert item.extraction is None
+
+
+async def test_generic_attachment_names_are_processed_and_flagged_for_a_person():
+    from vsmail.models import EmailRecord
+
+    fields = b"""Shipper: ACME LTD
+Consignee: BUYER LTD
+Notify Party: BUYER LTD
+Port of Loading: SINGAPORE
+Port of Discharge: KARACHI
+Container Count: 2
+Gross Weight: 22000 KG
+"""
+    email = EmailRecord(
+        "gmail_generic",
+        "sender@example.test",
+        "Please check",
+        "Please compare the SI and draft BL.",
+        ("Customer document.txt", "Carrier document.txt"),
+    )
+
+    class Source:
+        @staticmethod
+        def read_bytes(path):
+            return fields
+
+    item = await pipeline.process_email(Source(), MockProvider(), email)
+
+    assert item.verdict.status == "OK"
+    assert item.si is not None and item.bl is not None
+    assert "document role inferred from attachment order: SI, BL" in item.concerns

@@ -13,6 +13,14 @@ def test_role_ignores_a_misleading_document_heading(read_attachment):
     assert role_from_path("attachments/email_059_SI.pdf") == "SI"
 
 
+def test_role_accepts_customer_style_names():
+    assert role_from_path("Shipping Instructions.xlsx") == "SI"
+    assert role_from_path("Customer S.I. Form.pdf") == "SI"
+    assert role_from_path("Draft Bill of Lading.pdf") == "BL"
+    assert role_from_path("Draft B-L.pdf") == "BL"
+    assert role_from_path("Bill of Lading Instructions.docx") == "SI"
+
+
 def test_text_attachment_reads(read_attachment):
     document = read_attachment("attachments/email_004_SI.txt")
     assert document.readable

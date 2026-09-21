@@ -35,6 +35,7 @@ def test_a_result_carries_what_the_app_shows(store):
     assert result.subject and result.sender
     assert result.defect_fields == ["consignee", "notify_party"]
     assert len(result.fields) == 7
+    assert result.attachment_count == 2
 
 
 def test_the_field_detail_explains_an_accepted_difference(store):

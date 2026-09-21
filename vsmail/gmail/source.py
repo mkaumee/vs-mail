@@ -12,14 +12,18 @@ it.
 """
 from __future__ import annotations
 
-import base64
 import json
 import os
 import tempfile
 import threading
 from pathlib import Path
 
-from vsmail.gmail.message import parse_attachment_uri, to_record
+from vsmail.gmail.message import (
+    decode_data,
+    inline_attachment_data,
+    parse_attachment_uri,
+    to_record,
+)
 from vsmail.gmail.retry import execute
 from vsmail.models import EmailRecord
 
@@ -136,14 +140,19 @@ class GmailSource:
         if cached.is_file():
             return cached.read_bytes()
 
-        with self._api_lock:
-            response = execute(
-                self.service.users()
-                .messages()
-                .attachments()
-                .get(userId="me", messageId=message_id, id=attachment_id)
-            )
-        data = base64.urlsafe_b64decode(response["data"].encode())
+        if attachment_id.startswith("inline-"):
+            # The full message already contains these bytes, so this normally
+            # reads the message cache and costs no extra Gmail API request.
+            data = inline_attachment_data(self._message(message_id), attachment_id)
+        else:
+            with self._api_lock:
+                response = execute(
+                    self.service.users()
+                    .messages()
+                    .attachments()
+                    .get(userId="me", messageId=message_id, id=attachment_id)
+                )
+            data = decode_data(response["data"])
         _atomic_write(cached, data)
         return data
 

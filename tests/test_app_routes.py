@@ -317,6 +317,11 @@ def test_the_incoming_email_comes_back_with_its_attachments(client, auth):
     assert body["body"].strip()
     # What was read out of each slot, beside the filenames.
     assert "characters of text" in body["si_source"]
+    assert {document["role"] for document in body["documents"]} == {"SI", "BL"}
+    assert {document["name"] for document in body["documents"]} == {
+        "email_004_SI.txt",
+        "email_004_BL.txt",
+    }
 
 
 def test_a_pdf_document_is_served_inline_for_the_authenticated_viewer(client, auth):

@@ -30,6 +30,18 @@ export const REVIEW_REASONS: Record<string, string> = {
   missing_value: 'A required value is blank',
 }
 
+export const reviewReason = (
+  result: Pick<Result, 'review_reason' | 'si_source' | 'bl_source' | 'attachment_count'>,
+): string => {
+  if (result.review_reason !== 'missing_attachment') {
+    return REVIEW_REASONS[result.review_reason ?? ''] || 'Needs a person'
+  }
+  if (result.si_source && !result.bl_source) return 'Bill of lading attachment missing'
+  if (!result.si_source && result.bl_source) return 'Shipping instruction attachment missing'
+  if (result.attachment_count > 0) return 'Attached documents could not be identified'
+  return 'SI and bill of lading attachments missing'
+}
+
 export type Tone = 'defect' | 'review' | 'uncertain' | 'clean'
 
 export const statusTone = (result: Pick<Result, 'status' | 'concerns'>): Tone => {

@@ -18,6 +18,7 @@ from fastapi.responses import RedirectResponse, Response
 from api.auth import require_token
 from api.routes import build_provider
 from vsmail import pipeline, submission as submission_module
+from vsmail.attachments import attachment_name, attachment_slots
 from vsmail.documents import read_document
 from vsmail.inbox import Bundle
 from vsmail.jobs import JOBS, RUNNING
@@ -339,6 +340,8 @@ async def incoming_email(email_id: str) -> dict:
         raise HTTPException(502, detail=f"The mailbox could not load this email: {exc}")
 
     result = _results().results.get(email_id)
+    slots = attachment_slots(email.attachments)
+    roles = {path: role for role, path in slots.items()}
     return {
         "email_id": email_id,
         "sender": email.sender,
@@ -346,6 +349,14 @@ async def incoming_email(email_id: str) -> dict:
         "body": email.body,
         "core_body": email.core_body,
         "attachments": [str(a) for a in email.attachments],
+        "documents": [
+            {
+                "path": str(path),
+                "name": attachment_name(path),
+                "role": roles.get(path),
+            }
+            for path in email.attachments
+        ],
         # What was actually read out of each slot, so the filenames are not
         # the only thing a reviewer has to go on.
         "si_source": result.si_source if result else None,
@@ -396,7 +407,7 @@ def _document_media_type(name: str) -> str:
 async def document_file(email_id: str, role: str) -> Response:
     """Return the original attachment to the authenticated in-page viewer."""
     path, data = await _load_document(email_id, role)
-    name = Path(path).name
+    name = attachment_name(path)
     media_type = _document_media_type(name)
     return Response(
         content=data,
@@ -413,7 +424,7 @@ async def document_file(email_id: str, role: str) -> Response:
 async def document_preview(email_id: str, role: str) -> dict:
     """Describe how to render an attachment and safely extract text formats."""
     path, data = await _load_document(email_id, role)
-    name = Path(path).name
+    name = attachment_name(path)
     extension = Path(name).suffix.lower()
     media_type = _document_media_type(name)
 

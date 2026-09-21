@@ -9,6 +9,7 @@ import asyncio
 from dataclasses import dataclass
 from typing import Callable
 
+from vsmail.attachments import role_was_inferred
 from vsmail.compare import compare_all, decide
 from vsmail.config import CONFIDENCE_THRESHOLD, CONSENSUS_MODE, EQUIVALENCE_MODE
 from vsmail.consensus import extract_with_consensus
@@ -103,6 +104,16 @@ async def process_email(
         )
 
     report("reading_documents")
+    inferred_roles = [
+        role
+        for role in ("SI", "BL")
+        if role_was_inferred(email.attachments, role)
+    ]
+    if inferred_roles:
+        concerns.append(
+            "document role inferred from attachment order: "
+            + ", ".join(inferred_roles)
+        )
     # A Gmail attachment is a synchronous API call. Running both reads in
     # worker threads keeps the event loop free, so the browser can continue
     # polling the job instead of appearing frozen while documents download.

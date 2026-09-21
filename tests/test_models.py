@@ -22,6 +22,45 @@ def test_missing_slot_is_none():
     assert record.attachment_for("BL") is None
 
 
+def test_natural_customer_filenames_fill_the_document_slots():
+    record = EmailRecord(
+        "gmail_x",
+        "sender@example.test",
+        "Please compare",
+        "Attached are both documents.",
+        ("Shipping Instructions.xlsx", "Draft Bill of Lading.pdf"),
+    )
+
+    assert record.attachment_for("SI") == "Shipping Instructions.xlsx"
+    assert record.attachment_for("BL") == "Draft Bill of Lading.pdf"
+
+
+def test_two_generic_documents_are_opened_in_attachment_order():
+    record = EmailRecord(
+        "gmail_x",
+        "sender@example.test",
+        "Please compare",
+        "Attached are both documents.",
+        ("Customer document.pdf", "Carrier document.pdf"),
+    )
+
+    assert record.attachment_for("SI") == "Customer document.pdf"
+    assert record.attachment_for("BL") == "Carrier document.pdf"
+
+
+def test_one_unidentified_file_is_not_claimed_as_both_documents():
+    record = EmailRecord(
+        "gmail_x",
+        "sender@example.test",
+        "Please compare",
+        "See attachment.",
+        ("document.pdf",),
+    )
+
+    assert record.attachment_for("SI") is None
+    assert record.attachment_for("BL") is None
+
+
 def test_trim_body_drops_the_signature_block():
     record = _record("email_004")
     assert "Attached are the SI and draft BL" in record.core_body

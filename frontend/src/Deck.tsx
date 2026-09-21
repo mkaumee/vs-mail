@@ -12,7 +12,7 @@ import { HumanReview } from './Detail'
 import ReplyComposer from '@/components/ReplyComposer'
 import { useDeck } from './useDeck'
 import { useDrafts } from './useDrafts'
-import { REVIEW_REASONS, TONE_CLASS, statusTone } from './format'
+import { TONE_CLASS, reviewReason, statusTone } from './format'
 
 const fetchReply = (id: string) => api.reply(id)
 const fetchEmail = (id: string) => api.incoming(id)
@@ -96,7 +96,7 @@ export default function Deck({
     row.status === 'MISMATCH'
       ? row.defect_fields.join(', ')
       : row.status === 'NEEDS_REVIEW'
-        ? REVIEW_REASONS[row.review_reason ?? ''] || 'Needs a person'
+        ? reviewReason(row)
         : 'checked'
 
   return (

@@ -61,6 +61,35 @@ BLOCKED: dict[str, tuple[str, str]] = {
     ),
 }
 
+
+def _blocked_copy(result) -> tuple[str, str]:
+    """Describe the exact blocker when the stored evidence can identify it."""
+    if result.review_reason != "missing_attachment":
+        return BLOCKED.get(
+            result.review_reason or "",
+            ("the comparison could not be completed", "Could you take a look?"),
+        )
+    if result.si_source and not result.bl_source:
+        return (
+            "the draft bill of lading did not arrive",
+            "Could you resend the draft bill of lading?",
+        )
+    if result.bl_source and not result.si_source:
+        return (
+            "the shipping instruction did not arrive",
+            "Could you resend the shipping instruction?",
+        )
+    if getattr(result, "attachment_count", 0):
+        return (
+            "the attached files could not be identified as the SI and draft BL",
+            "Could you resend them with clear document names?",
+        )
+    return (
+        "both required documents did not arrive",
+        "Could you resend both documents?",
+    )
+
+
 #: Mailbox names that belong to a desk rather than a person. Addressing
 #: "Dear Docs," to docs@ is worse than not trying: it reads as a mail merge
 #: that guessed, which is the impression this whole feature is trying to
@@ -195,10 +224,7 @@ def compose(result) -> Draft | None:
         return Draft(result.sender, subject, body, "mismatch")
 
     if result.status == "NEEDS_REVIEW":
-        why, ask = BLOCKED.get(
-            result.review_reason or "",
-            ("the comparison could not be completed", "Could you take a look?"),
-        )
+        why, ask = _blocked_copy(result)
         blank = {
             f["field"]
             for f in fields

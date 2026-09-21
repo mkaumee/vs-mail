@@ -118,6 +118,47 @@ def test_a_blocked_comparison_says_what_would_unblock_it(reason, expected):
     assert "Could you resend" in draft.body
 
 
+def test_a_missing_bl_reply_asks_only_for_the_bl():
+    draft = compose(
+        make(
+            status="NEEDS_REVIEW",
+            review_reason="missing_attachment",
+            si_source="692 characters of text",
+            bl_source=None,
+            attachment_count=1,
+        )
+    )
+
+    assert "draft bill of lading did not arrive" in draft.body
+    assert "resend the draft bill of lading" in draft.body
+
+
+def test_a_reply_says_when_both_documents_are_absent():
+    draft = compose(
+        make(
+            status="NEEDS_REVIEW",
+            review_reason="missing_attachment",
+            attachment_count=0,
+        )
+    )
+
+    assert "both required documents did not arrive" in draft.body
+    assert "resend both documents" in draft.body
+
+
+def test_unidentified_attachments_are_not_described_as_absent():
+    draft = compose(
+        make(
+            status="NEEDS_REVIEW",
+            review_reason="missing_attachment",
+            attachment_count=1,
+        )
+    )
+
+    assert "could not be identified" in draft.body
+    assert "clear document names" in draft.body
+
+
 def test_a_blank_field_reads_as_blank():
     draft = compose(
         make(

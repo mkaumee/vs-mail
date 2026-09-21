@@ -5,8 +5,6 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import DocumentViewer from '@/components/DocumentViewer'
 
-const filename = (path: string) => path.split('/').pop() || path
-
 /**
  * The email being replied to.
  *
@@ -47,15 +45,10 @@ export default function IncomingEmail({ email }: { email: Email }) {
           </Button>
         )}
 
-        {email.attachments.length > 0 && (
+        {email.documents.length > 0 && (
           <div className="space-y-1">
-            {email.attachments.map((path) => {
-              const name = filename(path)
-              const documentRole = /_SI\./i.test(name)
-                ? 'SI' as const
-                : /_BL\./i.test(name)
-                  ? 'BL' as const
-                  : null
+            {email.documents.map((document) => {
+              const { path, name, role: documentRole } = document
               // Which slot this file filled, and what was actually read out
               // of it — a reviewer checking a verdict wants both.
               const source = documentRole === 'SI'

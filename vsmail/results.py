@@ -51,6 +51,7 @@ class Result:
     fields: list = field(default_factory=list)
     si_source: str | None = None
     bl_source: str | None = None
+    attachment_count: int = 0
     gmail_message_id: str | None = None
     #: When a reply was actually sent. A saved draft does not count —
     #: nobody has been replied to yet.
@@ -112,6 +113,7 @@ def summarize(
         fields=fields,
         si_source=_source(processed.si),
         bl_source=_source(processed.bl),
+        attachment_count=len(record.attachments) if record else 0,
         gmail_message_id=gmail_message_id,
     )
 

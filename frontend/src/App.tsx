@@ -26,7 +26,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { SkeletonRows } from '@/components/ui/skeleton'
 import {
-  CATEGORY_LABELS, REVIEW_REASONS, TONE_CLASS,
+  CATEGORY_LABELS, TONE_CLASS, reviewReason,
   firstName, greeting, relative, statusTone,
 } from './format'
 
@@ -387,8 +387,7 @@ function ReadLane({
                 {row.status === 'MISMATCH'
                   ? row.defect_fields.join(', ')
                   : row.status === 'NEEDS_REVIEW'
-                    ? REVIEW_REASONS[row.review_reason ?? ''] ||
-                      row.review_reason?.replace(/_/g, ' ')
+                    ? reviewReason(row)
                     : row.concerns?.length
                       ? 'uncertain'
                       : 'checked'}

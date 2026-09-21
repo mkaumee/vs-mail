@@ -102,3 +102,55 @@ def test_a_bad_attachment_reference_is_refused():
 def test_uri_round_trips():
     uri = attachment_uri("M", "A", "email_004_SI.txt")
     assert parse_attachment_uri(uri) == ("M", "A", "email_004_SI.txt")
+
+
+def test_uri_quotes_a_customer_filename_without_losing_it():
+    uri = attachment_uri("M", "A", "Draft B/L #2.pdf")
+    assert "%2F" in uri and "%23" in uri
+    assert parse_attachment_uri(uri) == ("M", "A", "Draft B/L #2.pdf")
+
+
+def test_a_small_inline_attachment_is_not_dropped():
+    import base64
+
+    message = as_message(
+        build_mime(
+            _RECORD,
+            [("Shipping Instructions.txt", b"SHIPPING INSTRUCTION")],
+            to="ops@example.test",
+        )
+    )
+    attachment = message["payload"]["parts"][1]
+    attachment["body"].pop("attachmentId")
+    attachment["body"]["data"] = base64.urlsafe_b64encode(
+        b"SHIPPING INSTRUCTION"
+    ).decode()
+
+    result = to_record(message)
+
+    assert len(result.attachments) == 1
+    assert parse_attachment_uri(result.attachments[0])[1].startswith("inline-")
+    assert result.attachment_for("SI") is not None
+
+
+def test_an_empty_named_attachment_is_still_visible():
+    message = as_message(
+        build_mime(_RECORD, [("Draft BL.pdf", b"")], to="ops@example.test")
+    )
+    attachment = message["payload"]["parts"][1]
+    attachment["body"] = {"size": 0, "data": ""}
+
+    result = to_record(message)
+
+    assert len(result.attachments) == 1
+    assert result.attachment_for("BL") is not None
+
+
+def test_unpadded_base64url_body_is_decoded():
+    import base64
+
+    message = as_message(build_mime(_RECORD, [], to="ops@example.test"))
+    encoded = base64.urlsafe_b64encode(b"a body requiring padding").decode().rstrip("=")
+    message["payload"]["body"]["data"] = encoded
+
+    assert to_record(message).body == "a body requiring padding"

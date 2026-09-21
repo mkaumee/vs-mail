@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 
+from vsmail.attachments import role_from_path
 from vsmail.models import Document
 from vsmail.documents.base import DocumentUnreadable
 from vsmail.documents.docx import read_docx
@@ -18,21 +19,6 @@ from vsmail.documents.text import read_text
 from vsmail.documents.xlsx import read_xlsx
 
 __all__ = ["read_document", "role_from_path"]
-
-
-def role_from_path(path: str) -> str:
-    """Whether an attachment fills the SI or the BL slot.
-
-    Taken from the filename only. The document's own heading is unreliable:
-    `email_059_SI.pdf` and `email_208_SI.pdf` are both titled "BILL OF LADING
-    INSTRUCTION" despite being shipping instructions.
-    """
-    name = os.path.basename(path).upper()
-    if "_SI." in name:
-        return "SI"
-    if "_BL." in name:
-        return "BL"
-    return "UNKNOWN"
 
 
 def read_document(path: str, data: bytes, role: str | None = None) -> Document:

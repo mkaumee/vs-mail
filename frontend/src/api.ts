@@ -33,6 +33,7 @@ export type Result = {
   fields: FieldRow[]
   si_source: string | null
   bl_source: string | null
+  attachment_count: number
   /** When a reply actually went out. Set, and it lives in Read. */
   sent_at: string | null
 }
@@ -73,6 +74,11 @@ export type IncomingEmail = {
   body: string
   core_body: string
   attachments: string[]
+  documents: Array<{
+    path: string
+    name: string
+    role: 'SI' | 'BL' | null
+  }>
   si_source: string | null
   bl_source: string | null
 }

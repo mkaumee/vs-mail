@@ -8,6 +8,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from vsmail.attachments import attachment_slots
+
 
 #: Separator the bundle uses ahead of quoted reply history.
 _QUOTED_HISTORY = re.compile(r"_{6,}")
@@ -76,14 +78,11 @@ class EmailRecord:
     def attachment_for(self, role: str) -> str | None:
         """The attachment filled into the SI or BL slot, if any.
 
-        Role comes from the filename, never from the document's own heading:
-        two SI files in this bundle are titled "BILL OF LADING INSTRUCTION".
+        Natural customer filenames are accepted as well as the bundle's
+        ``_SI`` and ``_BL`` suffixes. A two-file pair with generic names is
+        kept in MIME order rather than incorrectly reported as absent.
         """
-        marker = f"_{role.upper()}."
-        for path in self.attachments:
-            if marker in path.upper():
-                return path
-        return None
+        return attachment_slots(self.attachments).get(role.upper())
 
 
 @dataclass(frozen=True)

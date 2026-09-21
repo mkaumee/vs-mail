@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import Fields from '@/components/Fields'
 import ReplyCard from '@/components/ReplyCard'
-import { FIELD_LABELS, REVIEW_REASONS, TONE_CLASS, statusTone } from './format'
+import { FIELD_LABELS, TONE_CLASS, reviewReason, statusTone } from './format'
 
 const FIELDS = Object.keys(FIELD_LABELS)
 
@@ -148,7 +148,7 @@ export default function Detail({
     result.status === 'MISMATCH'
       ? `${result.defect_fields.length} field${result.defect_fields.length === 1 ? '' : 's'} differ`
       : result.status === 'NEEDS_REVIEW'
-        ? REVIEW_REASONS[result.review_reason ?? ''] || 'Needs a person'
+        ? reviewReason(result)
         : 'No mismatch detected'
 
   return (

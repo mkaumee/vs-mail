@@ -78,6 +78,31 @@ def test_a_binary_attachment_survives_the_round_trip(source, bundle):
     )
 
 
+def test_a_small_inline_attachment_is_fetchable_without_attachment_api(tmp_path):
+    import base64
+
+    from vsmail.models import EmailRecord
+
+    record = EmailRecord(
+        "inline_1", "sender@example.test", "Documents", "Please compare.", ()
+    )
+    raw = b"SHIPPING INSTRUCTION\nShipper: Example"
+    message = as_message(
+        build_mime(record, [("Shipping Instructions.txt", raw)], "ops@example.test"),
+        "INLINE1",
+    )
+    part = message["payload"]["parts"][1]
+    part["body"].pop("attachmentId")
+    part["body"]["data"] = base64.urlsafe_b64encode(raw).decode()
+    gmail = FakeGmail({"INLINE1": message})
+    inline_source = GmailSource(gmail, cache=tmp_path / "inline")
+
+    email = inline_source.get_message("INLINE1")
+
+    assert inline_source.read_bytes(email.attachment_for("SI")) == raw
+    assert gmail.attachments == {}, "the full message already held the bytes"
+
+
 def test_messages_are_cached_after_the_first_read(source, mailbox, tmp_path):
     source.emails()
     calls = len(mailbox.queries)
