@@ -60,6 +60,24 @@ def test_a_run_opens_a_case_for_everything_it_could_not_settle(store, processed)
     assert {c.email_id for c in store.queue()} == escalated
 
 
+def test_a_clean_result_with_an_advisory_note_does_not_open_help(store):
+    from types import SimpleNamespace
+
+    from vsmail.models import Verdict
+
+    processed = SimpleNamespace(
+        verdict=Verdict("clean", "BL_COMPARISON", status="OK"),
+        concerns=("two readings disagreed once",),
+    )
+    store.cases["clean"] = Case("clean", "uncertain")
+
+    counts = store.sync([processed])
+
+    assert counts["opened"] == 0
+    assert counts["auto_closed"] == 1
+    assert store.queue() == []
+
+
 def test_the_queue_is_ordered_worst_first(store, processed):
     store.sync(processed)
     severities = [case.severity for case in store.queue()]

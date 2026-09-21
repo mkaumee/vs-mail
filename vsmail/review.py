@@ -160,7 +160,7 @@ def needs_a_person(processed) -> str | None:
     """
     if processed.verdict.status == "NEEDS_REVIEW":
         return processed.verdict.review_reason or "unknown"
-    if processed.concerns:
+    if processed.verdict.status == "MISMATCH" and processed.concerns:
         return "uncertain"
     return None
 

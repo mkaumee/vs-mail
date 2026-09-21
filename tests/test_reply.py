@@ -6,7 +6,7 @@ it, no value paraphrased, no confidence the run did not actually have.
 """
 import pytest
 
-from vsmail.reply import ROLE_ADDRESSES, compose
+from vsmail.reply import ROLE_ADDRESSES, compose, manual
 from vsmail.results import Result
 
 
@@ -196,8 +196,15 @@ def test_a_clean_check_is_confirmed_because_silence_stalls_a_shipment():
     assert "please proceed to release" in draft.body
 
 
-def test_a_clean_check_carrying_doubt_is_not_offered_for_approval():
-    """Regression. Advisory mode keeps the OK *and* records the concern. A
-    confirmation that suppresses it would sound more certain to the customer
-    than the run was to itself."""
-    assert compose(make(status="OK", concerns=["two readings disagreed on ports"])) is None
+def test_a_clean_check_carrying_an_advisory_note_still_gets_a_confirmation():
+    draft = compose(make(status="OK", concerns=["two readings disagreed on ports"]))
+    assert draft.kind == "confirm"
+    assert "please proceed to release" in draft.body
+
+
+def test_a_help_case_starts_with_an_empty_manual_reply():
+    draft = manual(make(status="NEEDS_REVIEW"))
+    assert draft.kind == "manual_review"
+    assert draft.body == ""
+    assert draft.to == "hari_mardianto@aprilasia.com"
+    assert draft.subject.startswith("RE: ")

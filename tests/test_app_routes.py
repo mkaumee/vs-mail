@@ -210,6 +210,16 @@ def test_a_comparison_gets_a_drafted_reply(client, auth):
     assert "Kindly amend the draft" in draft["body"]
 
 
+def test_a_help_case_gets_an_empty_manual_reply(client, auth):
+    body = client.get("/inbox/email_501/reply", headers=auth).json()
+    draft = body["draft"]
+
+    assert draft["kind"] == "manual_review"
+    assert draft["body"] == ""
+    assert draft["to"]
+    assert draft["subject"].startswith("RE: ")
+
+
 def test_nothing_is_drafted_for_a_non_comparison(client, auth):
     body = client.get("/inbox/email_002/reply", headers=auth).json()
     assert body["draft"] is None

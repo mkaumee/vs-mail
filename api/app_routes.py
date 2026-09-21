@@ -23,7 +23,7 @@ from vsmail.documents import read_document
 from vsmail.inbox import Bundle
 from vsmail.jobs import JOBS, RUNNING
 from vsmail.results import ResultStore
-from vsmail.review import ReviewStore
+from vsmail.review import OPEN, ReviewStore
 
 app_router = APIRouter(dependencies=[Depends(require_token)])
 
@@ -174,15 +174,16 @@ async def reply_draft(email_id: str) -> dict:
     exact strings from the documents and carry legal weight, so nothing
     paraphrases them.
     """
-    from vsmail.reply import compose
+    from vsmail.reply import compose, manual
 
     result = _results().results.get(email_id)
     if result is None:
         raise HTTPException(404, detail=f"nothing recorded for {email_id}")
 
-    # A comparison request is composed: its sentences never vary, and the
-    # values are exact strings from the documents.
-    draft = compose(result)
+    # Help is intentionally manual: the evidence remains on screen, while the
+    # reply starts empty so the reviewer writes the decision they reached.
+    case = _review().get(email_id)
+    draft = manual(result) if case and case.state == OPEN else compose(result)
     if draft is not None:
         return {"draft": draft.as_dict()}
 

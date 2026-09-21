@@ -14,6 +14,7 @@ const KIND_LABEL: Record<string, string> = {
   missing_attachment: 'Asks for the missing attachment',
   unreadable: 'Asks for a machine-readable copy',
   wrong_doc_type: 'Says the wrong document was attached',
+  manual_review: 'Write the reply after reviewing the email and documents',
   answer: 'Answers the question',
 }
 

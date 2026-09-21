@@ -149,6 +149,11 @@ def _subject(original: str) -> str:
     return subject if subject.upper().startswith("RE:") else f"RE: {subject}"
 
 
+def manual(result) -> Draft:
+    """An empty reply for a case whose decision belongs to a human."""
+    return Draft(result.sender, _subject(result.subject), "", "manual_review")
+
+
 def _greeting(sender: str) -> str:
     """"Dear Deswita," where the address gives us a first name to use.
 
@@ -260,14 +265,6 @@ def compose(result) -> Draft | None:
     # Everything matched. This reply matters as much as the others: the draft
     # is held until someone confirms it, so silence is what stalls a shipment.
     #
-    # Unless the run recorded doubt. Advisory mode keeps the OK *and* the
-    # concern — two readings that disagreed, or an equivalence the model
-    # disputed — and a confirmation that suppresses it would be the system
-    # sounding more certain to the customer than it was to itself. It is not
-    # offered for approval; a person looks first.
-    if result.concerns:
-        return None
-
     body = "\n".join(
         [
             greeting,

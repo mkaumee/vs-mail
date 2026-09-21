@@ -63,7 +63,12 @@ class Result:
 
     @property
     def needs_person(self) -> bool:
-        return self.status == "NEEDS_REVIEW" or bool(self.concerns)
+        # A clean comparison remains a clean comparison. Advisory notes may
+        # still be shown beside it, but they must not suppress its confirmation
+        # draft or move it into Help. A disputed mismatch remains worth a look.
+        return self.status == "NEEDS_REVIEW" or (
+            self.status == "MISMATCH" and bool(self.concerns)
+        )
 
 
 def _source(document) -> str | None:

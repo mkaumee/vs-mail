@@ -75,6 +75,19 @@ def test_an_escalated_email_is_marked_as_needing_a_person(store):
     assert not store.results["email_009"].needs_person
 
 
+def test_a_clean_result_with_an_advisory_note_stays_out_of_help():
+    from vsmail.results import Result
+
+    result = Result(
+        email_id="clean",
+        category="BL_COMPARISON",
+        status="OK",
+        concerns=["two readings disagreed once"],
+    )
+
+    assert not result.needs_person
+
+
 def test_summarize_handles_an_email_with_no_documents(processed):
     spam = next(p for p in processed if p.verdict.category == "SPAM")
     result = summarize(spam, None)
