@@ -13,7 +13,6 @@ import { useDeck } from './useDeck'
 import { useDrafts } from './useDrafts'
 import { TONE_CLASS, reviewReason, statusTone } from './format'
 
-const fetchReply = (id: string) => api.reply(id)
 const fetchEmail = (id: string) => api.incoming(id)
 
 /** Everything about a verdict that should invalidate an edited reply. */
@@ -48,12 +47,20 @@ export default function Deck({
   rows: Result[]
   onSent: () => void
 }) {
+  // An escalated comparison exists in both Document Check and Help. Keep a
+  // separate reply per screen: the former uses its fixed template, while the
+  // latter deliberately starts empty for the reviewer.
+  const manualReply = lane === 'HELP'
+  const fetchReply = useCallback(
+    (id: string) => api.reply(id, manualReply),
+    [manualReply],
+  )
   // Memoised: usePrefetch depends on this array's identity, so a fresh
   // one every render would re-run the window on every render.
   const order = useMemo(() => rows.map((r) => r.email_id), [rows])
   const replyKeys = useMemo(
-    () => rows.map((row) => `${row.email_id}:${versionOf(row)}`),
-    [rows],
+    () => rows.map((row) => `${lane}:${row.email_id}:${versionOf(row)}`),
+    [lane, rows],
   )
   const { index, go, retry, retryEmail, current, entry, email, total } = useDeck(
     lane,

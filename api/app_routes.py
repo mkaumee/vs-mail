@@ -167,23 +167,25 @@ async def recheck(email_id: str) -> dict:
 
 
 @app_router.get("/inbox/{email_id}/reply")
-async def reply_draft(email_id: str) -> dict:
+async def reply_draft(email_id: str, manual: bool = False) -> dict:
     """The reply a checker would otherwise type, for them to approve.
 
     Composed rather than generated: the values in a correction email are the
     exact strings from the documents and carry legal weight, so nothing
     paraphrases them.
     """
-    from vsmail.reply import compose, manual
+    from vsmail.reply import compose, manual as manual_draft
 
     result = _results().results.get(email_id)
     if result is None:
         raise HTTPException(404, detail=f"nothing recorded for {email_id}")
 
-    # Help is intentionally manual: the evidence remains on screen, while the
-    # reply starts empty so the reviewer writes the decision they reached.
+    # One email can appear in both Document Check and Help. The caller names
+    # the screen it is opening from so Help can start blank without suppressing
+    # the normal template for that same email in Document Check.
     case = _review().get(email_id)
-    draft = manual(result) if case and case.state == OPEN else compose(result)
+    in_help = manual and case is not None and case.state == OPEN
+    draft = manual_draft(result) if in_help else compose(result)
     if draft is not None:
         return {"draft": draft.as_dict()}
 

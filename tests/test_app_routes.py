@@ -211,13 +211,21 @@ def test_a_comparison_gets_a_drafted_reply(client, auth):
 
 
 def test_a_help_case_gets_an_empty_manual_reply(client, auth):
-    body = client.get("/inbox/email_501/reply", headers=auth).json()
+    body = client.get("/inbox/email_501/reply?manual=true", headers=auth).json()
     draft = body["draft"]
 
     assert draft["kind"] == "manual_review"
     assert draft["body"] == ""
     assert draft["to"]
     assert draft["subject"].startswith("RE: ")
+
+
+def test_the_same_help_case_keeps_its_template_in_document_check(client, auth):
+    body = client.get("/inbox/email_501/reply", headers=auth).json()
+    draft = body["draft"]
+
+    assert draft["kind"] != "manual_review"
+    assert draft["body"]
 
 
 def test_nothing_is_drafted_for_a_non_comparison(client, auth):

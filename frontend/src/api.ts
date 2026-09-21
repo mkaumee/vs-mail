@@ -275,7 +275,8 @@ export const api = {
   // run stored and supplying a value looks like it did nothing.
   recheck: (id: string) =>
     call<{ result: Result }>(`/inbox/${id}/recheck`, { method: 'POST' }),
-  reply: (id: string) => call<ReplyResponse>(`/inbox/${id}/reply`),
+  reply: (id: string, manual = false) =>
+    call<ReplyResponse>(`/inbox/${id}/reply${manual ? '?manual=true' : ''}`),
   // The email itself. A reply approved without reading what it answers is
   // not really approved.
   incoming: (id: string) => call<IncomingEmail>(`/inbox/${id}/email`),
