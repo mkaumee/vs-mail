@@ -116,7 +116,7 @@ def evidence_from(processed) -> dict:
         if document is None:
             return "absent"
         if not document.readable:
-            return f"unreadable: {document.error}"
+            return "automatic reading failed"
         if document.images:
             return f"{len(document.images)} scanned page(s)"
         return f"{len(document.text)} chars of text"

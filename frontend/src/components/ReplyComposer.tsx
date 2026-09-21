@@ -12,7 +12,7 @@ const KIND_LABEL: Record<string, string> = {
   confirm: 'Confirms the draft and releases it',
   missing_value: 'Asks for the blank values',
   missing_attachment: 'Asks for the missing attachment',
-  unreadable: 'Asks for a readable copy',
+  unreadable: 'Asks for a machine-readable copy',
   wrong_doc_type: 'Says the wrong document was attached',
   answer: 'Answers the question',
 }

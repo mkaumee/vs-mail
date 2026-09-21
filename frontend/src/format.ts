@@ -26,7 +26,7 @@ export const FIELD_LABELS: Record<string, string> = {
 export const REVIEW_REASONS: Record<string, string> = {
   wrong_doc_type: 'Wrong document attached',
   missing_attachment: 'Attachment missing',
-  unreadable: 'File will not open',
+  unreadable: 'Automatic document reading failed',
   missing_value: 'A required value is blank',
 }
 

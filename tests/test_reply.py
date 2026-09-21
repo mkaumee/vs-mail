@@ -108,7 +108,7 @@ def test_a_mismatch_never_announces_discrepancies_and_lists_none():
     "reason,expected",
     [
         ("missing_attachment", "did not arrive"),
-        ("unreadable", "will not open"),
+        ("unreadable", "could not be read automatically"),
         ("wrong_doc_type", "not the document it should be"),
     ],
 )

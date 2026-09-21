@@ -70,7 +70,7 @@ def _source(document) -> str | None:
     if document is None:
         return None
     if not document.readable:
-        return f"unreadable: {document.error}"
+        return "automatic reading failed"
     if document.images:
         return f"{len(document.images)} scanned page(s)"
     return f"{len(document.text)} characters of text"

@@ -47,8 +47,8 @@ BLOCKED: dict[str, tuple[str, str]] = {
         "bill of lading attached?",
     ),
     "unreadable": (
-        "one of the attachments will not open",
-        "Could you resend it, ideally as a PDF saved rather than scanned?",
+        "one of the attachments could not be read automatically",
+        "Could you resend it as a standard PDF, or confirm the document details in a reply?",
     ),
     "wrong_doc_type": (
         "one of the attachments is not the document it should be",
