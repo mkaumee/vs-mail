@@ -61,9 +61,16 @@ cover all 520 emails.
 
 ## The web app
 
-Everything below can be driven from a browser: process the inbox, seed and
-clear Gmail, watch for new mail, and work the review queue. No terminal
-during a demo.
+The browser processes the connected Gmail inbox, monitors new mail, and
+provides the review queue. Processing always uses the deployed server's
+provider configuration (`VS_PROVIDER`, default `deepseek`); there is no
+browser switch to offline rules or sample data. Missing model configuration
+fails visibly instead of silently using offline rules.
+
+Sample-data seeding and reset controls are kept out of the app. The developer
+scripts below remain available for preparing a judging mailbox. The reply
+composer's test-recipient field is retained for judges, so sends can still be
+diverted to their chosen address.
 
 ```bash
 cd frontend && npm install && npm run build && cd ..

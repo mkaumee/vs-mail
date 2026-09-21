@@ -123,7 +123,7 @@ export type Inbox = { stats: Stats; lanes: Record<string, Result[]> }
 export type Job = {
   id: string
   kind: string
-  state: 'running' | 'done' | 'failed'
+  state: 'running' | 'done' | 'failed' | 'stopped'
   done: number
   total: number
   message: string
@@ -215,8 +215,8 @@ export const api = {
   disconnectGmail: () =>
     call<Disconnected>('/gmail/disconnect', { method: 'POST' }),
   email: (id: string) => call<{ result: Result; case: Case | null }>(`/inbox/${id}`),
-  startRun: (options: { source: string; provider: string; labels: boolean }) =>
-    call<Job>('/jobs/run', { method: 'POST', body: options }),
+  startRun: () =>
+    call<Job>('/jobs/run', { method: 'POST', body: { source: 'gmail', labels: true } }),
   job: (id: string) => call<Job>(`/jobs/${id}`),
   // Work outlives the tab that started it, so a reloaded page adopts
   // whatever is still in flight rather than showing an idle screen.
@@ -226,11 +226,9 @@ export const api = {
   // the one route with no token on it, so starting here is what authorises
   // the whole exchange.
   gmailAuthStart: () => call<{ authorization_url: string }>('/gmail/auth/start'),
-  seed: (limit?: number) => call<Job>('/gmail/seed', { method: 'POST', body: { limit } }),
-  resetGmail: () => call<Job>('/gmail/reset', { method: 'POST' }),
-  watchStatus: () => call<{ watching: boolean }>('/watch/status'),
-  startWatch: (options: { provider: string; interval: number }) =>
-    call<Job>('/watch/start', { method: 'POST', body: options }),
+  watchStatus: () => call<{ watching: boolean; job: Job | null }>('/watch/status'),
+  startWatch: () =>
+    call<Job>('/watch/start', { method: 'POST', body: { interval: 10 } }),
   stopWatch: () => call<{ stopped: boolean }>('/watch/stop', { method: 'POST' }),
   resolve: (id: string, body: unknown) =>
     call<unknown>(`/review/${id}/resolve`, { method: 'POST', body }),
@@ -253,6 +251,4 @@ export const api = {
     id: string,
     body: { to: string; subject: string; body: string; test_recipient?: string; allow_real?: boolean },
   ) => call<Sent>(`/inbox/${id}/reply/send`, { method: 'POST', body }),
-  clearEverything: () =>
-    call<Job>('/gmail/reset', { method: 'POST', body: { also_results: true } }),
 }

@@ -26,10 +26,10 @@ guarded = APIRouter(dependencies=[Depends(require_token)])
 def build_provider():
     """The provider this deployment runs, chosen by environment.
 
-    Defaults to the offline mock so the service starts and answers /health
-    even before a key is configured.
+    Live processing is the default. Offline rules require an explicit server
+    setting for development; a missing or invalid setting never selects them.
     """
-    name = os.environ.get("VS_PROVIDER", "mock").lower()
+    name = provider_name()
     if name == "deepseek":
         from vsmail.llm.deepseek import DeepSeekProvider
 
@@ -38,9 +38,15 @@ def build_provider():
         from vsmail.llm.remote import RemoteProvider
 
         return RemoteProvider()
-    from vsmail.llm.mock import MockProvider
+    if name == "mock":
+        from vsmail.llm.mock import MockProvider
 
-    return MockProvider()
+        return MockProvider()
+    raise HTTPException(503, detail="The processing service is not configured correctly.")
+
+
+def provider_name() -> str:
+    return (os.environ.get("VS_PROVIDER") or "deepseek").strip().lower()
 
 
 def _record(payload: EmailIn) -> EmailRecord:
@@ -71,7 +77,7 @@ async def health() -> dict:
 
     return {
         "status": "ok",
-        "provider": os.environ.get("VS_PROVIDER", "mock").lower(),
+        "provider": provider_name(),
         "token_configured": bool(configured_token()),
     }
 

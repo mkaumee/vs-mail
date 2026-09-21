@@ -1,6 +1,6 @@
 import { motion } from 'motion/react'
 import { LogOut } from 'lucide-react'
-import type { GmailStatus, Me, Stats } from '@/api'
+import type { GmailStatus, Me } from '@/api'
 import { Button } from '@/components/ui/button'
 import ThemeSwitcher from '@/components/ThemeSwitcher'
 import { initials } from '@/format'
@@ -18,7 +18,6 @@ export default function TopBar({
   crumb,
   gmail,
   me,
-  stats,
   onGmail,
   onSignOut,
 }: {
@@ -26,7 +25,6 @@ export default function TopBar({
   crumb: string
   gmail: GmailStatus | null
   me: Me | null
-  stats: Stats | undefined
   onGmail: () => void
   onSignOut: () => void
 }) {
@@ -57,12 +55,6 @@ export default function TopBar({
           <span className="chip__dot" />
           <span className="hidden max-w-44 truncate lg:inline">{chip.text}</span>
         </motion.button>
-
-        {stats?.source && (
-          <span className="mode-tag hidden xl:inline">
-            {stats.source === 'gmail' ? 'Gmail' : 'Sample data'}
-          </span>
-        )}
 
         <ThemeSwitcher />
 

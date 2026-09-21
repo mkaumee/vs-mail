@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import RedirectResponse
 
 from api.auth import require_token
+from api.routes import build_provider
 from vsmail import pipeline, submission as submission_module
 from vsmail.inbox import Bundle
 from vsmail.jobs import JOBS, RUNNING
@@ -34,18 +35,9 @@ def _review() -> ReviewStore:
     return ReviewStore(os.environ.get("VS_REVIEW_STORE", "review.json"))
 
 
-def _provider(name: str):
-    if name == "deepseek":
-        from vsmail.llm.deepseek import DeepSeekProvider
-
-        return DeepSeekProvider()
-    if name == "remote":
-        from vsmail.llm.remote import RemoteProvider
-
-        return RemoteProvider()
-    from vsmail.llm.mock import MockProvider
-
-    return MockProvider()
+def _result_source() -> str:
+    """Read an existing result from the source that produced it."""
+    return (os.environ.get("VS_RESULT_SOURCE") or _results().source or "gmail").strip()
 
 
 def _source(name: str):
@@ -107,7 +99,7 @@ async def recheck(email_id: str) -> dict:
 
     Only this email is reprocessed; the other 519 are left alone.
     """
-    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    source = _result_source()
     bundle = _source(source)
     try:
         email = bundle.get(email_id)
@@ -115,7 +107,7 @@ async def recheck(email_id: str) -> dict:
         raise HTTPException(404, detail=f"no such email: {email_id}")
 
     review = _review()
-    provider = _provider(os.environ.get("VS_PROVIDER", "mock").lower())
+    provider = build_provider()
     try:
         processed = await pipeline.process_email(bundle, provider, email, store=review)
     finally:
@@ -168,13 +160,13 @@ async def reply_draft(email_id: str) -> dict:
         }.get(result.category, "no reply is drafted for this kind of email")
         return {"draft": None, "why": why}
 
-    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    source = _result_source()
     try:
         email = _source(source).get(email_id)
     except Exception:
         email = None
 
-    provider = _provider(os.environ.get("VS_PROVIDER", "mock").lower())
+    provider = build_provider()
     try:
         answered, why = await compose_answer(result, email, get_index(), provider)
     finally:
@@ -279,7 +271,7 @@ async def incoming_email(email_id: str) -> dict:
     classifier actually saw; the full text is what a person needs when they
     suspect the trim dropped something.
     """
-    source = (os.environ.get("VS_RESULT_SOURCE") or "bundle").strip()
+    source = _result_source()
     try:
         email = _source(source).get(email_id)
     except Exception:
@@ -314,18 +306,17 @@ async def start_run(payload: dict | None = None) -> dict:
     so it returns a job to poll.
     """
     payload = payload or {}
-    source_name = payload.get("source", "bundle")
-    provider_name = payload.get("provider", "mock")
-    write_labels = bool(payload.get("labels"))
+    source_name = payload.get("source", "gmail")
+    write_labels = bool(payload.get("labels", True))
 
     async def work(job):
         job.say(f"reading {source_name}")
         source = _source(source_name)
-        provider = _provider(provider_name)
+        provider = build_provider()
         review = _review()
         emails = source.emails()
         job.total = len(emails)
-        job.say(f"{len(emails)} email(s); running {provider_name}")
+        job.say(f"Processing {len(emails)} email(s)")
 
         try:
             processed = await pipeline.process_all(
@@ -615,7 +606,6 @@ async def watch_start(payload: dict | None = None) -> dict:
     """Poll the mailbox and process whatever arrives."""
     payload = payload or {}
     interval = float(payload.get("interval", 10))
-    provider_name = payload.get("provider", "mock")
     write_labels = payload.get("labels", True)
 
     async def work(job):
@@ -629,7 +619,7 @@ async def watch_start(payload: dict | None = None) -> dict:
         svc = service()
         source = GmailSource(svc)
         labels = Labels(svc)
-        provider = _provider(provider_name)
+        provider = build_provider()
         review = _review()
         results = _results()
 

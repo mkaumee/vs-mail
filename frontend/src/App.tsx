@@ -192,7 +192,7 @@ export default function App() {
         {/* The mailbox has its own screen now, and the top-bar chip says
             its state. A third copy down here was two too many. */}
         {stats?.ran_at ? (
-          <div>Last run {relative(stats.ran_at)} · {stats.source}</div>
+          <div>Last run {relative(stats.ran_at)}</div>
         ) : (
           <div>Nothing processed yet.</div>
         )}
@@ -204,7 +204,6 @@ export default function App() {
           crumb={view === 'lanes' ? laneGroup : 'System'}
           gmail={gmail}
           me={me}
-          stats={stats}
           onGmail={() => go('gmail')}
           onSignOut={signOut}
         />
@@ -357,7 +356,7 @@ function ReadLane({
         {!data && <SkeletonRows rows={6} className="p-3" />}
         {empty && (
           <p className="p-6 text-sm text-muted-foreground">
-            Nothing processed yet. Choose a source and press <b>Process inbox</b>.
+            Nothing processed yet. Connect Gmail and press <b>Process inbox</b>.
           </p>
         )}
         {data && !empty && rows.length === 0 && (
